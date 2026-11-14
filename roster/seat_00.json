@@ -1,0 +1,15 @@
+{
+  "agent_model": "Magi-Master",
+  "capabilities": [
+    "arbitration",
+    "task-dispatch",
+    "merge-approval"
+  ],
+  "claimed_at": "2026-11-14T20:36:18Z",
+  "last_heartbeat": "2026-11-14T20:36:18Z",
+  "metadata": {},
+  "occupant": "Ethan",
+  "role": "host",
+  "seat_id": 0,
+  "status": "active"
+}

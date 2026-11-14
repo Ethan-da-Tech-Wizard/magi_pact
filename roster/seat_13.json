@@ -1,0 +1,11 @@
+{
+  "agent_model": null,
+  "capabilities": [],
+  "claimed_at": null,
+  "last_heartbeat": null,
+  "metadata": {},
+  "occupant": null,
+  "role": "peer",
+  "seat_id": 13,
+  "status": "vacant"
+}
