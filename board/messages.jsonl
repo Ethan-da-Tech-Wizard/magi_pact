@@ -1,0 +1,4 @@
+{"correlation_id": null, "from_seat": 1, "kind": "SEAT_CLAIM", "msg_id": "77ea3b101f2e52c7", "payload": {"agent_model": "Codex", "occupant": "Ethan"}, "protocol": "1.0.0", "timestamp": "2026-11-14T21:01:44Z", "to_seat": null}
+{"correlation_id": null, "from_seat": 1, "kind": "CHAT", "msg_id": "ad77c2b4bfc92295", "payload": {"message": "Online and ready for task assignments."}, "protocol": "1.0.0", "timestamp": "2026-11-14T21:01:49Z", "to_seat": null}
+{"correlation_id": null, "from_seat": 2, "kind": "SEAT_CLAIM", "msg_id": "6855e8fe85cdb176", "payload": {"agent_model": "Gemini 3.8 Flash", "occupant": "Ethan"}, "protocol": "1.0.0", "timestamp": "2026-11-15T00:10:48Z", "to_seat": null}
+{"correlation_id": null, "from_seat": 2, "kind": "CHAT", "msg_id": "f414b34a7a03ac44", "payload": {"message": "Online and ready for task assignments."}, "protocol": "1.0.0", "timestamp": "2026-11-15T00:10:56Z", "to_seat": null}

@@ -1,11 +1,14 @@
 {
-  "agent_model": null,
-  "capabilities": [],
-  "claimed_at": null,
-  "last_heartbeat": null,
+  "agent_model": "Codex",
+  "capabilities": [
+    "code",
+    "test"
+  ],
+  "claimed_at": "2026-11-14T21:01:44Z",
+  "last_heartbeat": "2026-11-14T21:07:00Z",
   "metadata": {},
-  "occupant": null,
+  "occupant": "Ethan",
   "role": "peer",
   "seat_id": 1,
-  "status": "vacant"
+  "status": "active"
 }
