@@ -1,3 +1,7 @@
+# Program: magi_pact - test_pact.py
+# Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+# Last Modified: 2026-11-18
+# Purpose: Unit tests for the Magi Pact protocol envelopes, the herder, and the locking mechanism.
 """Unit tests for Magi Pact protocol, herder, and locking mechanisms."""
 import shutil
 import tempfile
@@ -16,7 +20,9 @@ from pact.protocol import (
 
 
 class TestPactProtocol(unittest.TestCase):
+    """Test case group: PactProtocol behaviour."""
     def test_envelope_validation(self):
+        """Check: envelope validation."""
         env = make_envelope(
             kind=KIND_CHAT,
             from_seat=1,
@@ -29,20 +35,25 @@ class TestPactProtocol(unittest.TestCase):
         self.assertEqual(env["kind"], KIND_CHAT)
 
     def test_invalid_seat_bounds(self):
+        """Check: invalid seat bounds."""
         with self.assertRaises(ValueError):
             make_envelope(kind=KIND_CHAT, from_seat=32, to_seat=0, payload={})
 
 
 class TestPactHerder(unittest.TestCase):
+    """Test case group: PactHerder behaviour."""
     def setUp(self):
+        """Prepare a fresh fixture before each test."""
         self.test_dir = Path(tempfile.mkdtemp())
         self.herder = PactHerder(self.test_dir)
         self.herder.initialize_workspace(host_occupant="TestHost", host_agent="TestAgent")
 
     def tearDown(self):
+        """Clean up the fixture after each test."""
         shutil.rmtree(self.test_dir, ignore_errors=True)
 
     def test_32_seats_initialized(self):
+        """Check: 32 seats initialized."""
         seats = self.herder.list_seats()
         self.assertEqual(len(seats), MAX_SEATS)
         self.assertEqual(seats[0]["status"], SeatState.ACTIVE)
@@ -51,6 +62,7 @@ class TestPactHerder(unittest.TestCase):
 
     def test_claim_and_release_seat(self):
         # Claim first vacant (should be seat 1)
+        """Check: claim and release seat."""
         claimed = self.herder.claim_seat(occupant="Alice", agent_model="Claude-Code")
         self.assertEqual(claimed["seat_id"], 1)
         self.assertEqual(claimed["status"], SeatState.ACTIVE)
@@ -72,6 +84,7 @@ class TestPactHerder(unittest.TestCase):
 
     def test_claims_locking_conflict(self):
         # Seat 1 claims a file
+        """Check: claims locking conflict."""
         ok1 = self.herder.acquire_claim(seat_id=1, resource_path="services/auth.py", intent="refactor")
         self.assertTrue(ok1)
 
@@ -89,6 +102,7 @@ class TestPactHerder(unittest.TestCase):
 
     def test_inbox_and_messaging(self):
         # Seat 0 dispatches a task to Seat 2
+        """Check: inbox and messaging."""
         env = make_envelope(
             kind=KIND_TASK_DISPATCH,
             from_seat=0,
@@ -108,6 +122,7 @@ class TestPactHerder(unittest.TestCase):
 
     def test_stale_seat_reaping_utc(self):
         # Claim seat 1 with older heartbeat
+        """Check: stale seat reaping utc."""
         claimed = self.herder.claim_seat(occupant="Bob", agent_model="Codex", seat_id=1)
         self.assertEqual(claimed["status"], SeatState.ACTIVE)
 

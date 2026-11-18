@@ -1,11 +1,17 @@
+# Program: magi_pact - java_entries.py
+# Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+# Last Modified: 2026-11-18
+# Purpose: Holds the hand-written Java training entries (SFT and DPO records) used by the polyglot corpus builder.
 """Java Language Dataset Entries: 6 SFT + 6 DPO (Total 12)
 All chosen/completion programs are self-contained Java classes with self-testing assertions in main().
 """
 
 from datetime import datetime, timezone
 
+# One timestamp shared by every entry in this module.
 NOW = datetime.now(timezone.utc).isoformat()
 
+# Ordered list of records: six SFT (instruction -> completion) then six DPO (prompt, chosen, rejected).
 JAVA_ENTRIES = [
     # ------------------ SFT 001 ------------------
     {

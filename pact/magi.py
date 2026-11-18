@@ -1,13 +1,8 @@
 #!/usr/bin/env python3
-# ==============================================================================
-# Program: magi.py
-# Programmer: Ethan-da-Tech-Wizard
-# Last Modified: November 18, 2026
-# Purpose: Direct executable CLI runner and front-door entrypoint for Magi Pact.
-#          Allows human developers and autonomous AI agents to interact with
-#          the 32-Seat Serverless Consensus Mesh without requiring package
-#          installation or system-wide pip registration.
-# ==============================================================================
+# Program: magi_pact - magi.py
+# Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+# Last Modified: 2026-11-18
+# Purpose: Executable front door that launches the Magi Pact command line interface without package installation.
 
 """Magi CLI Executable Entrypoint and Script Launcher.
 

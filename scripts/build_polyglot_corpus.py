@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# Program: magi_pact - build_polyglot_corpus.py
+# Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+# Last Modified: 2026-11-18
+# Purpose: Builds and verifies the polyglot (C, C++, C#, Java, Rust, Go) training corpus, compiling the C and C++ entries locally, and writing the corpus file with a printed SHA256.
 """Build and verify the Deep Polyglot Training Corpus (C, C++, C#, Java, Rust, Go).
 
 Produces:
@@ -21,12 +25,16 @@ import subprocess
 import sys
 from collections import Counter
 
+# --- Paths ---
+# Repo root is one level above scripts/.
 ROOT_DIR = Path(__file__).resolve().parent.parent
 OUTPUT_DIR = ROOT_DIR / "data" / "corpus" / "polyglot"
 OUTPUT_PATH = OUTPUT_DIR / "polyglot_corpus.jsonl"
+# Temporary folder where candidate programs are compiled and run.
 SCRATCH_DIR = ROOT_DIR / "data" / "sandbox_scratch" / "polyglot_verify"
 
 # Ensure scripts dir is in sys.path
+# Make the sibling polyglot_corpus_gen package importable.
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
@@ -103,23 +111,28 @@ def verify_syntax(code: str, domain: str) -> bool:
 
 def normalize_record(entry: dict) -> dict:
     """Normalizes record schema so it is compatible with both SFT and DPO trainers."""
+    # Copy so the source entry is not mutated.
     rec = dict(entry)
     kind = rec["kind"]
     if kind == "sft":
+        # SFT rows may carry the answer under either key; mirror it into both.
         comp = rec.get("completion") or rec.get("chosen")
         rec["completion"] = comp
         rec["chosen"] = comp
     elif kind == "dpo":
+        # DPO rows keep 'chosen' as the answer; expose it as 'completion' too.
         rec["completion"] = rec.get("chosen")
     return rec
 
 
 def main():
+    """Entry point: build the polyglot corpus, verify it, and write the output file and checksum."""
     print("=" * 70)
     print(" 🚀 MAGI PACT: POLYGLOT DEEP CORPUS BUILDER")
     print("=" * 70)
 
     all_entries = []
+    # Language label paired with its hand-written entries.
     datasets = [
         ("c", C_ENTRIES),
         ("cpp", CPP_ENTRIES),
@@ -152,6 +165,7 @@ def main():
                 print(f"  ✓ {eid} syntax and self-test assertions verified.")
 
     # Write output
+    # Write one JSON object per line (JSONL); keep non-ASCII text readable.
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
         for rec in all_entries:
@@ -161,6 +175,7 @@ def main():
     # Compute SHA256
     hasher = hashlib.sha256()
     with open(OUTPUT_PATH, "rb") as f:
+        # Hash in 64 KiB chunks so large files do not need to fit in memory.
         while chunk := f.read(65536):
             hasher.update(chunk)
     sha256_hex = hasher.hexdigest()

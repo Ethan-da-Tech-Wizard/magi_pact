@@ -1,3 +1,8 @@
+# Program: magi_pact - web_runtime.py
+# Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+# Last Modified: 2026-11-18
+# Purpose: Validates modern CSS, accessible HTML and TypeScript samples with structural checks and no runtime dependencies.
+
 """Web & Modern Runtime Engineering Engine.
 
 Validates and locks in:
@@ -16,6 +21,7 @@ from typing import Dict, List, Optional, Tuple, Any
 
 @dataclass
 class WebComponentSpec:
+    """Specification for one web-runtime validation case."""
     spec_id: str
     kind: str  # "css" | "html" | "typescript"
     title: str

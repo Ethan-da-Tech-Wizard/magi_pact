@@ -1,12 +1,7 @@
-# ==============================================================================
-# Program: cli.py
-# Programmer: Ethan-da-Tech-Wizard
-# Last Modified: November 18, 2026
-# Purpose: Unified Command Line Interface (CLI) for the Magi Pact 32-Seat
-#          Federated Consensus Mesh. Provides intuitive terminal commands for
-#          humans and autonomous agents to initialize meshes, claim seats,
-#          exchange messages, acquire advisory locks, and manage dataset shards.
-# ==============================================================================
+# Program: magi_pact - cli.py
+# Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+# Last Modified: 2026-11-18
+# Purpose: Command line interface for the Magi Pact 32-seat mesh: initializing meshes, claiming seats, messaging, locks and dataset shards.
 
 """Command Line Interface for Magi Pact.
 

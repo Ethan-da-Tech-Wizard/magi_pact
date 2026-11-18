@@ -1,12 +1,7 @@
-# ==============================================================================
-# Program: splits.py
-# Programmer: Ethan-da-Tech-Wizard
-# Last Modified: November 18, 2026
-# Purpose: Dataset Splitting, Qwen3.5 ChatML Formatting, and Assistant-Only Loss
-#          Masking Engine. Partitions the consolidated golden master corpus into
-#          disjoint sft_train, dpo_train, dev, and eval_heldout splits with
-#          zero cross-split contamination and cryptographic manifest checksums.
-# ==============================================================================
+# Program: magi_pact - splits.py
+# Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+# Last Modified: 2026-11-18
+# Purpose: Splits the consolidated corpus into train, dev and held-out sets, formats ChatML and builds assistant-only loss masks with manifest checksums.
 
 """Dataset Splitting, Qwen3.5 ChatML Formatting, and Assistant-Only Loss Masking Engine.
 
@@ -1443,6 +1438,7 @@ class DatasetSplitter:
             4. Return manifest dictionary.
         """
         def domain_counts(rows: List[Dict[str, Any]]) -> Dict[str, int]:
+            """Count rows per domain, returned in sorted key order."""
             counts: Dict[str, int] = {}
             for r in rows:
                 d = r.get("domain", "unknown")
@@ -1450,6 +1446,7 @@ class DatasetSplitter:
             return dict(sorted(counts.items()))
 
         def kind_counts(rows: List[Dict[str, Any]]) -> Dict[str, int]:
+            """Count rows per example kind, returned in sorted key order."""
             counts: Dict[str, int] = {}
             for r in rows:
                 k = r.get("kind", "unknown")

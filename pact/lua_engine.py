@@ -1,3 +1,8 @@
+# Program: magi_pact - lua_engine.py
+# Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+# Last Modified: 2026-11-18
+# Purpose: Defines Lua training problems with chosen and rejected answers and converts them to corpus records.
+
 """Lua Language Trajectory Engine.
 
 Generates deep, diversified Lua 5.1/5.4/LuaJIT training pairs covering:
@@ -21,6 +26,7 @@ from typing import Dict, List, Optional, Any
 
 @dataclass
 class LuaTrajectory:
+    """One Lua training example: a prompt with a preferred (chosen) and a flawed (rejected) answer."""
     id: str
     category: str
     prompt: str
@@ -240,6 +246,7 @@ LUA_PROBLEMS: List[LuaTrajectory] = [
 ]
 
 def generate_lua_corpus() -> List[Dict[str, Any]]:
+    """Convert every Lua problem definition into a training record dictionary."""
     records = []
     for p in LUA_PROBLEMS:
         records.append({

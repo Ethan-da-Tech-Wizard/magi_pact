@@ -1,12 +1,7 @@
-# ==============================================================================
-# Program: dataset.py
-# Programmer: Ethan-da-Tech-Wizard
-# Last Modified: November 18, 2026
-# Purpose: Multi-language Golden Training Dataset & Non-Overwrite Sharding Engine.
-#          Curates verified SFT/DPO pairs across systems domains (C, C++, Rust,
-#          Bash, Linux, Git) and implements federated shard reconciliation
-#          across the 32-seat mesh using cryptographic content hashing.
-# ==============================================================================
+# Program: magi_pact - dataset.py
+# Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+# Last Modified: 2026-11-18
+# Purpose: Curated multi-language training pairs plus non-overwriting shard export and reconciliation using content hashes.
 
 """Multi-language Golden Training Dataset & Non-Overwrite Sharding Engine.
 

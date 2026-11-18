@@ -1,3 +1,8 @@
+# Program: magi_pact - go_engine.py
+# Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+# Last Modified: 2026-11-18
+# Purpose: Defines Go training problems with chosen and rejected answers and converts them to corpus records.
+
 """Go Language Trajectory Engine.
 
 Generates execution-grade Go 1.21+ training pairs covering:
@@ -23,6 +28,7 @@ from typing import Dict, List, Optional, Any
 
 @dataclass
 class GoTrajectory:
+    """One Go training example: a prompt with a preferred (chosen) and a flawed (rejected) answer."""
     id: str
     category: str
     prompt: str
@@ -322,6 +328,7 @@ GO_PROBLEMS: List[GoTrajectory] = [
 ]
 
 def generate_go_corpus() -> List[Dict[str, Any]]:
+    """Convert every Go problem definition into a training record dictionary."""
     records = []
     for p in GO_PROBLEMS:
         records.append({

@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# Program: magi_pact - build_systems_corpus.py
+# Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+# Last Modified: 2026-11-18
+# Purpose: Generates and verifies the systems and firmware trajectory corpus (bash, Arch, RPM-based Linux, UEFI, git internals) and writes it with a checksum.
 """Build and verify the Systems & Firmware Corpus (40 Golden Trajectories).
 
 Generates:
@@ -22,6 +26,7 @@ import sys
 from typing import Dict, List, Any, Tuple
 
 # Ensure workspace root is in sys.path
+# --- Paths and imports ---
 ROOT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT_DIR))
 
@@ -38,9 +43,11 @@ from pact.systems import (
 from pact.dedup import PolicyLeakScanner, skeleton_structure_hash
 from pact.fleet_dedup import FleetDedupEngine
 
+# Where the finished corpus is written.
 OUTPUT_PATH = ROOT_DIR / "data" / "corpus" / "systems" / "systems_corpus.jsonl"
 
 # 25 expanded trajectories to add to the existing 15 baseline trajectories
+# --- Expanded trajectory data (one chosen/rejected pair per entry, grouped by domain) ---
 EXPANDED_SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
     # -----------------------------------------------------------------
     # BASH POSIX EXPANSIONS (5 new, 8 total)
@@ -1059,8 +1066,11 @@ EXPANDED_SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
 ]
 
 
+# --- Validation and output ---
+
 def validate_trajectory_suite(trajectories: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Validates every trajectory against safety, policy, firmware, and dedup gates."""
+    # Collectors for each class of problem; the suite passes only if all stay empty.
     policy_scanner = PolicyLeakScanner()
     bash_issues = []
     arch_issues = []
@@ -1082,6 +1092,7 @@ def validate_trajectory_suite(trajectories: List[Dict[str, Any]]) -> Dict[str, A
             "chosen": ex["chosen"],
             "rejected": ex["rejected"],
         }
+        # Scan the whole record for credential-like or private-host content.
         leaks = policy_scanner.scan_record(record)
         if leaks:
             policy_leaks.append({"id": ex["id_suffix"], "leaks": leaks})
@@ -1123,10 +1134,12 @@ def validate_trajectory_suite(trajectories: List[Dict[str, Any]]) -> Dict[str, A
                 fedora_issues.append({"id": ex["id_suffix"], "issues": ["Rejected response unexpectedly passed validation"]})
 
     # 4. Fleet deduplication audit
+    # Audit prompt/answer diversity across the whole suite.
     dedup_report = FleetDedupEngine.audit_corpus(
         [{"prompt": t["prompt"], "chosen": t["chosen"]} for t in trajectories]
     )
 
+    # Pass only when every collector is empty and the dedup gate passed.
     all_passed = (
         len(bash_issues) == 0
         and len(arch_issues) == 0
@@ -1151,6 +1164,7 @@ def validate_trajectory_suite(trajectories: List[Dict[str, Any]]) -> Dict[str, A
 
 def compile_and_write_corpus() -> Tuple[int, str, Dict[str, int]]:
     """Compiles 15 baseline + 25 expanded trajectories into systems_corpus.jsonl."""
+    # Combine the baseline set from pact.systems with the expanded set above.
     all_trajectories = list(SYSTEMS_TRAJECTORIES) + list(EXPANDED_SYSTEMS_TRAJECTORIES)
 
     # Validate full suite
@@ -1160,6 +1174,7 @@ def compile_and_write_corpus() -> Tuple[int, str, Dict[str, int]]:
         print(json.dumps(val_res, indent=2))
         sys.exit(1)
 
+    # One timestamp shared by every row of this build.
     now = datetime.now(timezone.utc).isoformat()
     lines = []
     domain_counts = {}
@@ -1167,6 +1182,7 @@ def compile_and_write_corpus() -> Tuple[int, str, Dict[str, int]]:
     for ex in all_trajectories:
         dom = ex["domain"]
         domain_counts[dom] = domain_counts.get(dom, 0) + 1
+        # Wrap each trajectory in the shared training-pair schema.
         pair = TrainingPair(
             id=f"TWU_GOLD_{ex['id_suffix']}",
             domain=dom,
@@ -1184,6 +1200,7 @@ def compile_and_write_corpus() -> Tuple[int, str, Dict[str, int]]:
     content = "\n".join(lines) + "\n"
     OUTPUT_PATH.write_text(content, encoding="utf-8")
 
+    # Checksum of the exact bytes written, for later integrity checks.
     sha256_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
 
     # Also write a manifest checksum file
