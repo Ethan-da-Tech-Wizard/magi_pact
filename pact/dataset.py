@@ -1,7 +1,6 @@
 # ==============================================================================
 # Program: dataset.py
 # Programmer: Ethan-da-Tech-Wizard
-# Course: CIS 156 / Advanced Systems
 # Last Modified: November 18, 2026
 # Purpose: Multi-language Golden Training Dataset & Non-Overwrite Sharding Engine.
 #          Curates verified SFT/DPO pairs across systems domains (C, C++, Rust,

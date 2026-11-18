@@ -2,7 +2,6 @@
 # ==============================================================================
 # Program: magi.py
 # Programmer: Ethan-da-Tech-Wizard
-# Course: CIS 156 / Advanced Systems
 # Last Modified: November 18, 2026
 # Purpose: Direct executable CLI runner and front-door entrypoint for Magi Pact.
 #          Allows human developers and autonomous AI agents to interact with

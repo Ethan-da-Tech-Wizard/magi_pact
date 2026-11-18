@@ -1,7 +1,6 @@
 # ==============================================================================
 # Program: abli.py
 # Programmer: Ethan-da-Tech-Wizard
-# Course: CIS 156 / Advanced Systems
 # Last Modified: November 18, 2026
 # Purpose: Abliterated Model Registry & Multi-Platform Inference Coordinator.
 #          Provides the /abli CLI orchestration layer for un-censored,

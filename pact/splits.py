@@ -1,7 +1,6 @@
 # ==============================================================================
 # Program: splits.py
 # Programmer: Ethan-da-Tech-Wizard
-# Course: CIS 156 / Advanced Systems
 # Last Modified: November 18, 2026
 # Purpose: Dataset Splitting, Qwen3.5 ChatML Formatting, and Assistant-Only Loss
 #          Masking Engine. Partitions the consolidated golden master corpus into
