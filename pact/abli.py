@@ -1,3 +1,14 @@
+# ==============================================================================
+# Program: abli.py
+# Programmer: Ethan-da-Tech-Wizard
+# Course: CIS 156 / Advanced Systems
+# Last Modified: November 18, 2026
+# Purpose: Abliterated Model Registry & Multi-Platform Inference Coordinator.
+#          Provides the /abli CLI orchestration layer for un-censored,
+#          orthogonalized-weight model variants across Mac (Metal/MLX),
+#          Arch Linux (CUDA/Vulkan), and Fedora (ROCm/CPU).
+# ==============================================================================
+
 """Abliterated Model Registry & Multi-Platform Inference Coordinator.
 
 Provides the `/abli` CLI interface and orchestration layer for un-censored,
