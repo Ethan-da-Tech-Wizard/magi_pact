@@ -1,7 +1,6 @@
 # ==============================================================================
 # Program: protocol.py
 # Programmer: Ethan-da-Tech-Wizard
-# Course: CIS 156 / Advanced Systems
 # Last Modified: November 18, 2026
 # Purpose: Defines the core communication protocol, message envelope schemas,
 #          deterministic seat state definitions, and cryptographic identifiers
