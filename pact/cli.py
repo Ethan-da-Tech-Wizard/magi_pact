@@ -1,7 +1,6 @@
 # ==============================================================================
 # Program: cli.py
 # Programmer: Ethan-da-Tech-Wizard
-# Course: CIS 156 / Advanced Systems
 # Last Modified: November 18, 2026
 # Purpose: Unified Command Line Interface (CLI) for the Magi Pact 32-Seat
 #          Federated Consensus Mesh. Provides intuitive terminal commands for
