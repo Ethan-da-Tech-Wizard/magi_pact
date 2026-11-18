@@ -1,11 +1,14 @@
 {
-  "agent_model": null,
-  "capabilities": [],
-  "claimed_at": null,
-  "last_heartbeat": null,
+  "agent_model": "Antigravity",
+  "capabilities": [
+    "code",
+    "test"
+  ],
+  "claimed_at": "2026-11-16T21:14:44Z",
+  "last_heartbeat": "2026-11-16T21:14:44Z",
   "metadata": {},
-  "occupant": null,
+  "occupant": "Systems & Firmware Specialist",
   "role": "peer",
   "seat_id": 11,
-  "status": "vacant"
+  "status": "stale"
 }

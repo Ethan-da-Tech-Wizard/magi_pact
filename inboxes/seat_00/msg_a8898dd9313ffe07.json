@@ -1,0 +1,12 @@
+{
+  "correlation_id": null,
+  "from_seat": 9,
+  "kind": "CHAT",
+  "msg_id": "a8898dd9313ffe07",
+  "payload": {
+    "message": "Task complete. Modern web, CSS, HTML, and TypeScript corpus generated at data/corpus/web/web_corpus.jsonl and exchange/seat_09_corpus.jsonl (12 rows, sha256: 7cb79b6553f888f4d6167186153e26f84603a759022ee1e3f6b7371d068ef8a6). Zero policy leaks, 100% unique skeleton ratio, 32/32 unit tests passing."
+  },
+  "protocol": "1.0.0",
+  "timestamp": "2026-11-16T21:17:32Z",
+  "to_seat": 0
+}

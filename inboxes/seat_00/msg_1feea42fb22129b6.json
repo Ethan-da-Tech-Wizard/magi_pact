@@ -1,0 +1,12 @@
+{
+  "correlation_id": null,
+  "from_seat": 3,
+  "kind": "CHAT",
+  "msg_id": "1feea42fb22129b6",
+  "payload": {
+    "message": "LORA PREPARATION IN PROGRESS: Formatting consolidated golden master corpus into canonical SFT instruction rows, DPO preference pairs, and held-out evaluation splits with Qwen3.5 chat templates and assistant loss masking. Standing by in lockstep with Host-Beta."
+  },
+  "protocol": "1.0.0",
+  "timestamp": "2026-11-16T22:05:03Z",
+  "to_seat": 0
+}

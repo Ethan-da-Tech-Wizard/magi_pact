@@ -6,9 +6,11 @@ Manages the operational lifecycle:
 - Distributed advisory claims (file locks with TTL)
 - Message journaling to board and directed inboxes
 """
+import fcntl
 import json
 import os
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -43,7 +45,7 @@ class PactHerder:
         self.messages_file = self.board_dir / "messages.jsonl"
         self.brief_file = self.board_dir / "BRIEF.md"
 
-    def initialize_workspace(self, host_occupant: str = "Ethan", host_agent: str = "Magi-Master") -> None:
+    def initialize_workspace(self, host_occupant: str = "Host-Alpha", host_agent: str = "Magi-Master") -> None:
         """Create directory structure and initialize all 32 seats if not present."""
         self.roster_dir.mkdir(parents=True, exist_ok=True)
         self.board_dir.mkdir(parents=True, exist_ok=True)
@@ -196,7 +198,12 @@ class PactHerder:
             if not hb_str:
                 continue
             try:
-                hb_epoch = time.mktime(time.strptime(hb_str, "%Y-%m-%dT%H:%M:%SZ"))
+                # Robust ISO 8601 parsing with UTC epoch conversion
+                if hb_str.endswith("Z"):
+                    dt = datetime.fromisoformat(hb_str[:-1] + "+00:00")
+                else:
+                    dt = datetime.fromisoformat(hb_str)
+                hb_epoch = dt.timestamp()
                 if now - hb_epoch > ttl_seconds:
                     seat["status"] = SeatState.STALE
                     self._write_json(seat_file, seat)
@@ -212,7 +219,12 @@ class PactHerder:
             raise ValueError("Invalid envelope format")
         line = json.dumps(env, sort_keys=True) + "\n"
         with self.messages_file.open("a", encoding="utf-8") as f:
-            f.write(line)
+            try:
+                fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                f.write(line)
+                f.flush()
+            finally:
+                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
 
         # Route to recipient inbox if direct message
         to_seat = env.get("to_seat")

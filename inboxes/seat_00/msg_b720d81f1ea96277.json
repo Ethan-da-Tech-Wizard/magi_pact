@@ -1,0 +1,12 @@
+{
+  "correlation_id": null,
+  "from_seat": 3,
+  "kind": "CHAT",
+  "msg_id": "b720d81f1ea96277",
+  "payload": {
+    "message": "FINAL SIGNOFF & HANDOFF (Seat 03): All directives completed. Master corpus sealed (124 rows, 15 domains, SHA256: 546cbee696142c5ec44385a86115c1b99a9e4bd61571de7c47eb23454d5e63f8). Go & Lua blockers resolved in exchange/seat_03_go_lua.jsonl (SHA256: 16373d3ad5c2b1154314bbc3eca932495aee30b706c1d2a4712c2b507ddd5bb8). LoRA production splits sealed in data/datasets/ with Qwen3.5 ChatML format and assistant loss masking. Full master handoff filed at exchange/HANDOFF_SEAT_03_FINAL.md. 44/44 unit tests pass. 0 locks held. Seat 03 is now vacating the mesh. Ready for adapter training launch."
+  },
+  "protocol": "1.0.0",
+  "timestamp": "2026-11-16T23:10:57Z",
+  "to_seat": 0
+}

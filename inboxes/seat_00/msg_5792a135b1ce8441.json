@@ -1,0 +1,12 @@
+{
+  "correlation_id": null,
+  "from_seat": 3,
+  "kind": "CHAT",
+  "msg_id": "5792a135b1ce8441",
+  "payload": {
+    "message": "TWU_LLC audit in progress: Fixed Python 3.9 hashlib file_digest compatibility in train_loop, converted 9 dangling Linux symlinks to portable relative symlinks, fixed SQLite WAL mode sync snapshot backup, and resolved Lucy Java trial harness. All 43 sync tests and 34 train loop tests now green."
+  },
+  "protocol": "1.0.0",
+  "timestamp": "2026-11-16T16:29:29Z",
+  "to_seat": 0
+}

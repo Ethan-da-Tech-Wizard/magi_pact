@@ -13,6 +13,8 @@ from .protocol import (
     SeatState,
     make_envelope,
 )
+from .abli import AbliteratedRegistry
+from .dataset import export_seat_shard, reconcile_mesh_shards, generate_language_matrix, DOMAINS
 
 
 def get_herder(dir_override: str = None) -> PactHerder:
@@ -93,13 +95,40 @@ def cmd_status(args):
 
 def cmd_take_seat(args):
     herder = get_herder(args.dir)
+    target_seat = None
+    if getattr(args, "seat", None) is not None:
+        if str(args.seat).lower() != "auto":
+            try:
+                target_seat = int(args.seat)
+            except ValueError:
+                target_seat = None
+    name = getattr(args, "name", None) or "Node-Agent"
+    model = getattr(args, "model", None) or "Coding-Agent"
+    caps = getattr(args, "capabilities", None)
     res = herder.claim_seat(
-        occupant=args.name,
-        agent_model=args.model,
-        seat_id=args.seat,
-        capabilities=args.capabilities.split(",") if args.capabilities else None
+        occupant=name,
+        agent_model=model,
+        seat_id=target_seat,
+        capabilities=caps.split(",") if caps else None
     )
     print(f"🎉 Successfully claimed Seat {res['seat_id']:02d} for {res['occupant']} ({res['agent_model']})!")
+
+
+def cmd_who(args):
+    herder = get_herder(args.dir)
+    seats = herder.list_seats()
+    active = [s for s in seats if s.get("status") in (SeatState.ACTIVE, SeatState.STALE)]
+    print("\n" + "=" * 64)
+    print(" 👥 MAGI PACT ACTIVE MESH ROSTER")
+    print("=" * 64)
+    if not active:
+        print("  No active seats in mesh.")
+    else:
+        for s in active:
+            role = "HOST" if s["seat_id"] == 0 else "PEER"
+            st_color = "\033[92mACTIVE\033[0m" if s["status"] == SeatState.ACTIVE else "\033[91mSTALE\033[0m"
+            print(f"  • Seat {s['seat_id']:02d} [{role}]: {s.get('occupant', 'anon')} ({s.get('agent_model', 'agent')}) - {st_color} (Heartbeat: {s.get('last_heartbeat')})")
+    print("=" * 64 + "\n")
 
 
 def cmd_leave_seat(args):
@@ -116,9 +145,16 @@ def cmd_heartbeat(args):
 
 def cmd_post(args):
     herder = get_herder(args.dir)
+    from_seat = getattr(args, "from_seat", None)
+    if from_seat is None:
+        import os
+        try:
+            from_seat = int(os.environ.get("MAGI_SEAT", 0))
+        except (ValueError, TypeError):
+            from_seat = 0
     env = make_envelope(
         kind=KIND_CHAT,
-        from_seat=args.from_seat,
+        from_seat=from_seat,
         to_seat=args.to,
         payload={"message": args.msg}
     )
@@ -169,6 +205,60 @@ def cmd_release(args):
         sys.exit(1)
 
 
+def cmd_abli(args):
+    herder = get_herder(args.dir)
+    reg = AbliteratedRegistry(herder.root)
+    if args.set:
+        ok = reg.set_active_profile(args.set)
+        if ok:
+            print(f"🔥 Successfully activated abliterated profile: {args.set}")
+        else:
+            print(f"❌ Unknown profile ID: {args.set}")
+            sys.exit(1)
+        return
+
+    data = reg.list_profiles()
+    hw = data["current_hardware"]
+    print("\n" + "=" * 64)
+    print(" 🔥 ABLITERATED MODEL ORCHESTRATION (/abli)")
+    print("=" * 64)
+    print(f"Detected Platform : {hw['system']} ({hw['machine']}) | OS Flavor: {hw['flavor']}")
+    print(f"Active Profile ID : {data['active_id']}")
+    print("\nAvailable Abliterated Profiles:")
+    for p in data["profiles"]:
+        active_mark = " [ACTIVE ★]" if p.get("active") else ""
+        print(f"  • {p['id']}{active_mark}")
+        print(f"    Name      : {p['name']}")
+        print(f"    Hardware  : {p['target_hardware']} (Backend: {p['backend']})")
+        print(f"    Weights   : {p['weights_path']}")
+        print(f"    Context   : {p['context_length']:,} tokens")
+        print(f"    Corpus ID : {p['training_corpus_id']}")
+
+
+def cmd_dataset(args):
+    herder = get_herder(args.dir)
+    if args.export_seat is not None:
+        p = export_seat_shard(args.export_seat, herder.root)
+        print(f"📦 Exported Seat {args.export_seat:02d} golden shard to: {p}")
+        return
+
+    if args.reconcile:
+        res = reconcile_mesh_shards(herder.root)
+        print(f"✨ Reconciled {res['shards_processed']} peer shards into: {res['master_path']}")
+        print(f"   Total Unique Records : {res['total_records']}")
+        print(f"   Domains Covered      : {res['domains_covered']}")
+        return
+
+    pairs = generate_language_matrix()
+    print("\n" + "=" * 64)
+    print(" 📚 MULTI-LANGUAGE GOLDEN DATASET MATRIX")
+    print("=" * 64)
+    print(f"Supported Language & System Domains ({len(DOMAINS)} total):")
+    for d in DOMAINS:
+        count = sum(1 for p in pairs if p.domain == d)
+        print(f"  • {d.ljust(20)}: {count} gold verified exemplar(s)")
+
+
 def main():
     parser = argparse.ArgumentParser(prog="magi_pact", description="Magi Pact: 32-Seat Multi-Agent Federated Mesh")
     parser.add_argument("--dir", help="Path to magi_pact root directory", default=None)
@@ -176,33 +266,51 @@ def main():
 
     # init
     p_init = sub.add_parser("init", help="Initialize a fresh Magi Pact directory")
-    p_init.add_argument("--host", default="Ethan", help="Host occupant name")
+    p_init.add_argument("--host", default="Host-Alpha", help="Host occupant name")
     p_init.add_argument("--agent", default="Magi-Master", help="Host agent model name")
 
     # status
     sub.add_parser("status", help="Display 32-seat board, active claims, and message log")
 
-    # take-seat
+    # who (compact active members view)
+    sub.add_parser("who", help="List active seats and members in the mesh")
+
+    # take-seat / join
     p_take = sub.add_parser("take-seat", help="Take an open seat")
-    p_take.add_argument("--name", required=True, help="Human developer name or callsign")
+    p_take.add_argument("--name", default="Node-Agent", help="Human developer name or callsign")
     p_take.add_argument("--model", default="Coding-Agent", help="Agent model (e.g. Claude Code, Codex)")
-    p_take.add_argument("--seat", type=int, default=None, help="Explicit seat ID (1-31), or next available")
+    p_take.add_argument("--seat", default="auto", help="Seat ID (1-31), or 'auto' for next available")
     p_take.add_argument("--capabilities", default="code,test", help="Comma-separated capabilities")
 
-    # leave-seat
+    p_join = sub.add_parser("join", help="Join the mesh and claim a seat")
+    p_join.add_argument("--name", default="Node-Agent", help="Human developer name or callsign")
+    p_join.add_argument("--model", default="Coding-Agent", help="Agent model (e.g. Claude Code, Codex)")
+    p_join.add_argument("--seat", default="auto", help="Seat ID (1-31), or 'auto' for next available")
+    p_join.add_argument("--capabilities", default="code,test", help="Comma-separated capabilities")
+
+    # leave-seat / leave
     p_leave = sub.add_parser("leave-seat", help="Vacate a seat")
     p_leave.add_argument("--seat", type=int, required=True, help="Seat ID to vacate")
     p_leave.add_argument("--reason", default="leaving", help="Reason for departure")
+
+    p_l = sub.add_parser("leave", help="Leave the mesh and vacate a seat")
+    p_l.add_argument("--seat", type=int, required=True, help="Seat ID to vacate")
+    p_l.add_argument("--reason", default="leaving", help="Reason for departure")
 
     # heartbeat
     p_hb = sub.add_parser("heartbeat", help="Send a heartbeat to keep a seat active")
     p_hb.add_argument("--seat", type=int, required=True, help="Seat ID")
 
-    # post
+    # post / send
     p_post = sub.add_parser("post", help="Post a message to the board or a peer")
-    p_post.add_argument("--from-seat", type=int, required=True, help="Your seat ID")
+    p_post.add_argument("--from-seat", type=int, default=None, help="Your seat ID (default: MAGI_SEAT or 0)")
     p_post.add_argument("--to", type=int, default=None, help="Recipient seat ID (omit for ALL)")
     p_post.add_argument("--msg", required=True, help="Message text")
+
+    p_send = sub.add_parser("send", help="Send a message to a peer or broadcast to all")
+    p_send.add_argument("--from-seat", type=int, default=None, help="Your seat ID (default: MAGI_SEAT or 0)")
+    p_send.add_argument("--to", type=int, default=None, help="Recipient seat ID (omit for ALL)")
+    p_send.add_argument("--msg", required=True, help="Message text")
 
     # dispatch
     p_disp = sub.add_parser("dispatch", help="Host task dispatch")
@@ -226,6 +334,17 @@ def main():
     p_rel.add_argument("--seat", type=int, required=True, help="Your seat ID")
     p_rel.add_argument("--path", required=True, help="File path to release")
 
+    # abli (/abli)
+    p_abli = sub.add_parser("abli", help="Abliterated model profiles and hardware routing (/abli)")
+    p_abli.add_argument("--set", help="Set active abliterated profile ID")
+    p_abli.add_argument("--list", action="store_true", help="List all abliterated profiles")
+
+    # dataset
+    p_ds = sub.add_parser("dataset", help="Multi-language training dataset and shard management")
+    p_ds.add_argument("--export-seat", type=int, help="Export golden dataset shard for a seat into exchange/")
+    p_ds.add_argument("--reconcile", action="store_true", help="Reconcile all peer shards in exchange/ without overwrites")
+    p_ds.add_argument("--status", action="store_true", help="Show language domain coverage")
+
     args = parser.parse_args()
     if not args.command:
         parser.print_help()
@@ -234,14 +353,20 @@ def main():
     dispatch_map = {
         "init": cmd_init,
         "status": cmd_status,
+        "who": cmd_who,
         "take-seat": cmd_take_seat,
+        "join": cmd_take_seat,
         "leave-seat": cmd_leave_seat,
+        "leave": cmd_leave_seat,
         "heartbeat": cmd_heartbeat,
         "post": cmd_post,
+        "send": cmd_post,
         "dispatch": cmd_dispatch,
         "inbox": cmd_inbox,
         "claim": cmd_claim,
         "release": cmd_release,
+        "abli": cmd_abli,
+        "dataset": cmd_dataset,
     }
     dispatch_map[args.command](args)
 

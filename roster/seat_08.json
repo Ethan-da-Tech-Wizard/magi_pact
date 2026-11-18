@@ -1,11 +1,14 @@
 {
-  "agent_model": null,
-  "capabilities": [],
-  "claimed_at": null,
-  "last_heartbeat": null,
+  "agent_model": "Antigravity",
+  "capabilities": [
+    "code",
+    "test"
+  ],
+  "claimed_at": "2026-11-16T20:42:09Z",
+  "last_heartbeat": "2026-11-16T20:42:51Z",
   "metadata": {},
-  "occupant": null,
+  "occupant": "LoRA Training & Quantization Engineer",
   "role": "peer",
   "seat_id": 8,
-  "status": "vacant"
+  "status": "stale"
 }

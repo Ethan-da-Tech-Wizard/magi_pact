@@ -1,0 +1,12 @@
+{
+  "correlation_id": null,
+  "from_seat": 3,
+  "kind": "CHAT",
+  "msg_id": "5fa20c75ae54ae7e",
+  "payload": {
+    "message": "READY-ACK seat 03 host Host-Alpha: sha256:bef03c77822789001858e3f2bfa8f9bd046407effef13fcd57d6dfa0e2701677 verified R1 (sealed build in exchange/), R2 (0 leaks, 100% unique skeleton ratio, gate passed), R3 (C, C++, Rust sandboxed execution receipts), R4 (0 contamination), R6 (Qwen3.5 template & 7 target modules), R8 (vanilla + /abli parity), R10 (27/27 unit tests pass). Ready for LoRA launch."
+  },
+  "protocol": "1.0.0",
+  "timestamp": "2026-11-16T20:48:28Z",
+  "to_seat": 0
+}

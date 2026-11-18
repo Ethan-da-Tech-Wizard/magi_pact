@@ -1,0 +1,38 @@
+{
+  "profiles": [
+    {
+      "id": "qwen-coder-32b-abli-mac",
+      "name": "Qwen2.5-Coder-32B-Instruct-Abliterated-4bit",
+      "target_hardware": "Darwin-arm64",
+      "backend": "mlx",
+      "context_length": 32768,
+      "weights_path": "~/.cache/models/qwen2.5-coder-32b-abli-mlx",
+      "abliterated": true,
+      "training_corpus_id": "golden_multilang_corpus.jsonl",
+      "active": true
+    },
+    {
+      "id": "deepseek-coder-v2-abli-arch",
+      "name": "DeepSeek-Coder-V2-Lite-Abliterated-AWQ",
+      "target_hardware": "Linux-x86_64",
+      "backend": "vllm",
+      "context_length": 65536,
+      "weights_path": "/mnt/models/deepseek-coder-v2-abli-awq",
+      "abliterated": true,
+      "training_corpus_id": "golden_multilang_corpus.jsonl",
+      "active": true
+    },
+    {
+      "id": "llama33-70b-abli-fedora",
+      "name": "Llama-3.3-70B-Instruct-Abliterated-GGUF",
+      "target_hardware": "Linux-x86_64",
+      "backend": "llama.cpp",
+      "context_length": 131072,
+      "weights_path": "/var/models/llama-3.3-70b-abli.Q4_K_M.gguf",
+      "abliterated": true,
+      "training_corpus_id": "golden_multilang_corpus.jsonl",
+      "active": true
+    }
+  ],
+  "active_id": "qwen-coder-32b-abli-mac"
+}

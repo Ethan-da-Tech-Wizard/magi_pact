@@ -1,11 +1,20 @@
 {
-  "agent_model": null,
-  "capabilities": [],
-  "claimed_at": null,
-  "last_heartbeat": null,
+  "agent_model": "Antigravity",
+  "capabilities": [
+    "c",
+    "cpp",
+    "csharp",
+    "java",
+    "rust",
+    "go",
+    "sft",
+    "dpo"
+  ],
+  "claimed_at": "2026-11-16T21:15:11Z",
+  "last_heartbeat": "2026-11-16T21:15:11Z",
   "metadata": {},
-  "occupant": null,
+  "occupant": "Polyglot Deep Corpus Builder",
   "role": "peer",
   "seat_id": 12,
-  "status": "vacant"
+  "status": "stale"
 }

@@ -1,0 +1,24 @@
+{
+  "pipeline": "GGUF_LoRA_Conversion",
+  "base_model": "Qwen/Qwen2.5-Coder-7B-Instruct",
+  "is_abliterated": false,
+  "profile_id": null,
+  "adapter_path": "exchange/adapters/dpo",
+  "adapter_gguf": "/Users/admin/magi_pact/exchange/gguf/adapter_lora.gguf",
+  "merged_fp16_gguf": "/Users/admin/magi_pact/exchange/gguf/model_merged.gguf",
+  "quantized_outputs": {
+    "Q4_K_M": "/Users/admin/magi_pact/exchange/gguf/model.Q4_K_M.gguf",
+    "Q8_0": "/Users/admin/magi_pact/exchange/gguf/model.Q8_0.gguf"
+  },
+  "commands": [
+    "python3 /opt/llama.cpp/convert_lora_to_gguf.py exchange/adapters/dpo --outtype f16 --outfile /Users/admin/magi_pact/exchange/gguf/adapter_lora.gguf",
+    "python3 /opt/llama.cpp/export_lora.py --base Qwen/Qwen2.5-Coder-7B-Instruct --lora exchange/adapters/dpo --outtype f16 --outfile /Users/admin/magi_pact/exchange/gguf/model_merged.gguf",
+    "/opt/llama.cpp/llama-quantize /Users/admin/magi_pact/exchange/gguf/model_merged.gguf /Users/admin/magi_pact/exchange/gguf/model.Q4_K_M.gguf Q4_K_M",
+    "/opt/llama.cpp/llama-quantize /Users/admin/magi_pact/exchange/gguf/model_merged.gguf /Users/admin/magi_pact/exchange/gguf/model.Q8_0.gguf Q8_0"
+  ],
+  "cloud_cost": 0.0,
+  "quant_formats": [
+    "Q4_K_M",
+    "Q8_0"
+  ]
+}

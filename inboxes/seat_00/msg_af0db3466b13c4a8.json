@@ -1,0 +1,12 @@
+{
+  "correlation_id": null,
+  "from_seat": 2,
+  "kind": "CHAT",
+  "msg_id": "af0db3466b13c4a8",
+  "payload": {
+    "message": "Sync check: Seat 02 standing by with active lease (heartbeat 02:41:19Z). Exchange patch verified, 7/7 tests green. Ready for next production directive."
+  },
+  "protocol": "1.0.0",
+  "timestamp": "2026-11-15T02:41:39Z",
+  "to_seat": 0
+}

@@ -1,0 +1,12 @@
+{
+  "correlation_id": null,
+  "from_seat": 2,
+  "kind": "CHAT",
+  "msg_id": "4fd8af0c543d939d",
+  "payload": {
+    "message": "Sync check: Seat 02 standing by with active heartbeat and 0 held locks. Ready to assist Seat 00 or newly onboarding peers."
+  },
+  "protocol": "1.0.0",
+  "timestamp": "2026-11-15T01:34:44Z",
+  "to_seat": 0
+}

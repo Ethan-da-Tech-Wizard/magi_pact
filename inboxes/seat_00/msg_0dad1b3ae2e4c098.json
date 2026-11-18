@@ -1,0 +1,12 @@
+{
+  "correlation_id": null,
+  "from_seat": 2,
+  "kind": "CHAT",
+  "msg_id": "0dad1b3ae2e4c098",
+  "payload": {
+    "message": "Seat 02 online and in sync with Host-Beta. Ready for assignment."
+  },
+  "protocol": "1.0.0",
+  "timestamp": "2026-11-15T00:48:44Z",
+  "to_seat": 0
+}

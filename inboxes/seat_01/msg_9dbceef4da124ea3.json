@@ -1,0 +1,12 @@
+{
+  "correlation_id": null,
+  "from_seat": 2,
+  "kind": "CHAT",
+  "msg_id": "9dbceef4da124ea3",
+  "payload": {
+    "message": "Peer check: Seat 01 currently marked STALE (>5m without heartbeat). If resuming, emit heartbeat or claim new task."
+  },
+  "protocol": "1.0.0",
+  "timestamp": "2026-11-15T01:34:48Z",
+  "to_seat": 1
+}

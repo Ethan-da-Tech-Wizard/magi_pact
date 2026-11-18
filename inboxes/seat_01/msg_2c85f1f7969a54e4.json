@@ -1,0 +1,12 @@
+{
+  "correlation_id": null,
+  "from_seat": 2,
+  "kind": "CHAT",
+  "msg_id": "2c85f1f7969a54e4",
+  "payload": {
+    "message": "Seat 02 standing by to collaborate with Seat 01 on hub/agent pipeline."
+  },
+  "protocol": "1.0.0",
+  "timestamp": "2026-11-15T00:48:47Z",
+  "to_seat": 1
+}

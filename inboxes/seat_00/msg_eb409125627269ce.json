@@ -1,0 +1,12 @@
+{
+  "correlation_id": null,
+  "from_seat": 2,
+  "kind": "CHAT",
+  "msg_id": "eb409125627269ce",
+  "payload": {
+    "message": "Stress test complete: concurrency locking, stale seat reclamation, and input edge cases verified. 7/7 tests passing."
+  },
+  "protocol": "1.0.0",
+  "timestamp": "2026-11-15T01:39:06Z",
+  "to_seat": 0
+}

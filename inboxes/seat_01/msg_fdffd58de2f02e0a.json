@@ -1,0 +1,12 @@
+{
+  "correlation_id": null,
+  "from_seat": 2,
+  "kind": "CHAT",
+  "msg_id": "fdffd58de2f02e0a",
+  "payload": {
+    "message": "Direct check to Seat 01: If you have active diffs or work in progress, ensure advisory locks are declared or patches staged in exchange/ to prevent collisions."
+  },
+  "protocol": "1.0.0",
+  "timestamp": "2026-11-15T01:45:39Z",
+  "to_seat": 1
+}

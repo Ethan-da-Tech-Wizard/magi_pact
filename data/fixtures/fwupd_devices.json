@@ -1,0 +1,89 @@
+{
+  "Devices": [
+    {
+      "Name": "System Firmware",
+      "DeviceId": "8c3b7a54-6e19-487b-bb66-419b4b0e5124",
+      "Guid": [
+        "8c3b7a54-6e19-487b-bb66-419b4b0e5124",
+        "2292a439-0dd4-5735-a75d-f1b9f8725d2c"
+      ],
+      "Plugin": "uefi_capsule",
+      "Protocol": "org.uefi.capsule",
+      "Flags": [
+        "updatable",
+        "supported",
+        "needs-reboot",
+        "registered",
+        "has-security-fixes"
+      ],
+      "Version": "0.1.24",
+      "VersionLowest": "0.1.0",
+      "VersionFormat": "triplet",
+      "Vendor": "Dell Inc.",
+      "Summary": "UEFI System Resource Table (ESRT) Mainboard Firmware",
+      "UpdateState": "unknown"
+    },
+    {
+      "Name": "TPM 2.0",
+      "DeviceId": "68a3047b-19d2-5a21-9989-11c57e62a13a",
+      "Guid": [
+        "68a3047b-19d2-5a21-9989-11c57e62a13a",
+        "d89b3f3b-6e93-51ef-8d69-58cb30be4a73"
+      ],
+      "Plugin": "tpm",
+      "Protocol": "org.trustedcomputinggroup.tpm2",
+      "Flags": [
+        "updatable",
+        "supported",
+        "registered"
+      ],
+      "Version": "7.85.0",
+      "VersionLowest": "7.80.0",
+      "VersionFormat": "triplet",
+      "Vendor": "STMicroelectronics",
+      "Summary": "Trusted Platform Module 2.0 Security Processor",
+      "UpdateState": "unknown"
+    },
+    {
+      "Name": "Samsung SSD 990 PRO 2TB",
+      "DeviceId": "0e665ba7-0348-522f-bb67-628b030b77b1",
+      "Guid": [
+        "0e665ba7-0348-522f-bb67-628b030b77b1",
+        "9f8a32bb-485a-5282-965a-df9c13b34208"
+      ],
+      "Plugin": "nvme",
+      "Protocol": "org.nvmexpress",
+      "Flags": [
+        "updatable",
+        "supported",
+        "registered"
+      ],
+      "Version": "3B2QEXM7",
+      "VersionLowest": "1B2QEXM7",
+      "VersionFormat": "plain",
+      "Vendor": "Samsung",
+      "Summary": "NVMe Controller Solid-State Drive",
+      "UpdateState": "unknown"
+    },
+    {
+      "Name": "Embedded Controller",
+      "DeviceId": "1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+      "Guid": [
+        "1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
+      ],
+      "Plugin": "uefi_capsule",
+      "Protocol": "org.uefi.capsule",
+      "Flags": [
+        "updatable",
+        "supported",
+        "needs-reboot"
+      ],
+      "Version": "0.1.12",
+      "VersionLowest": "0.1.0",
+      "VersionFormat": "triplet",
+      "Vendor": "System76 / ITE",
+      "Summary": "Laptop Embedded Controller Power & Thermal Manager",
+      "UpdateState": "unknown"
+    }
+  ]
+}

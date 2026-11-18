@@ -1,11 +1,14 @@
 {
-  "agent_model": null,
-  "capabilities": [],
-  "claimed_at": null,
-  "last_heartbeat": null,
+  "agent_model": "Antigravity",
+  "capabilities": [
+    "code",
+    "test"
+  ],
+  "claimed_at": "2026-11-16T20:41:57Z",
+  "last_heartbeat": "2026-11-16T20:41:57Z",
   "metadata": {},
-  "occupant": null,
+  "occupant": "Compiler & Harness Verification Engineer",
   "role": "peer",
   "seat_id": 5,
-  "status": "vacant"
+  "status": "stale"
 }

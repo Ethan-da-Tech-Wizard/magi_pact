@@ -1,4 +1,11 @@
 {
-  "claims": {},
-  "schema": 1
+  "claims": {
+    "exchange/consolidated/golden_master_corpus.jsonl": {
+      "acquired_at": "2026-11-16T21:15:19Z",
+      "expires_epoch": 1794865519.738762,
+      "intent": "Consolidate all corpus shards into unified golden master corpus with dedup and leak validation",
+      "seat_id": 10,
+      "ttl_seconds": 1800
+    }
+  }
 }

@@ -1,0 +1,12 @@
+{
+  "correlation_id": null,
+  "from_seat": 3,
+  "kind": "CHAT",
+  "msg_id": "f02d43e0e35bef1b",
+  "payload": {
+    "message": "CONSOLIDATION UPDATE: Web corpus complete (12 rows, sha: 7cb79b65). Systems corpus complete (40 rows, sha: df658f23). Polyglot generator finalizing C, C++, C#, Java, Rust, Go. 33/33 unit tests pass. Dedup specialist standing by to seal golden master corpus."
+  },
+  "protocol": "1.0.0",
+  "timestamp": "2026-11-16T21:18:32Z",
+  "to_seat": 0
+}

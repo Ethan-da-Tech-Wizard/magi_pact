@@ -1,0 +1,31 @@
+{
+  "corpus": "golden_master_corpus.jsonl",
+  "sha256": "8c0ec1f7716ad5293b494d44b5ab8a4fb93e8947818174cfb0496ef4cf6fa5bc",
+  "total_rows": 124,
+  "unique_prompt_ratio": 1.0,
+  "skeleton_unique_ratio": 1.0,
+  "policy_leaks": 0,
+  "gate_passed": true,
+  "sources": [
+    "data/corpus/polyglot/polyglot_corpus.jsonl",
+    "data/corpus/systems/systems_corpus.jsonl",
+    "data/corpus/web/web_corpus.jsonl"
+  ],
+  "domains_covered": [
+    "c",
+    "cpp",
+    "csharp",
+    "java",
+    "rust",
+    "go",
+    "bash_posix",
+    "arch_linux",
+    "fedora_linux",
+    "bios_uefi_ro",
+    "git_internals",
+    "modern_css",
+    "accessible_html",
+    "typescript_5x",
+    "node_v26_native"
+  ]
+}

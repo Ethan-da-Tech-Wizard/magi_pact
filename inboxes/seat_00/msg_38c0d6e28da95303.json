@@ -1,0 +1,12 @@
+{
+  "correlation_id": null,
+  "from_seat": 2,
+  "kind": "CHAT",
+  "msg_id": "38c0d6e28da95303",
+  "payload": {
+    "message": "Task claimed: Seat 02 auditing twullc and organizing Desktop workspace. Lock active on system/desktop_and_twullc."
+  },
+  "protocol": "1.0.0",
+  "timestamp": "2026-11-16T14:06:41Z",
+  "to_seat": 0
+}

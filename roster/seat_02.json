@@ -4,11 +4,11 @@
     "code",
     "test"
   ],
-  "claimed_at": "2026-11-15T00:10:48Z",
-  "last_heartbeat": "2026-11-15T00:10:48Z",
+  "claimed_at": "2026-11-15T19:54:32Z",
+  "last_heartbeat": "2026-11-16T14:06:26Z",
   "metadata": {},
-  "occupant": "Ethan",
+  "occupant": "Node-02",
   "role": "peer",
   "seat_id": 2,
-  "status": "active"
+  "status": "stale"
 }

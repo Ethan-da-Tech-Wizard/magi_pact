@@ -1,0 +1,34 @@
+{
+  "esrt_version": 1,
+  "entries_count": 2,
+  "entries": [
+    {
+      "entry_index": 0,
+      "fw_class": "8c3b7a54-6e19-487b-bb66-419b4b0e5124",
+      "fw_type": 1,
+      "fw_type_name": "SYSTEM_FIRMWARE",
+      "fw_version": 66072,
+      "fw_version_formatted": "0.1.24",
+      "lowest_supported_fw_version": 65536,
+      "lowest_supported_fw_version_formatted": "0.1.0",
+      "capsule_flags": 15,
+      "last_attempt_version": 66072,
+      "last_attempt_status": 0,
+      "last_attempt_status_name": "SUCCESS"
+    },
+    {
+      "entry_index": 1,
+      "fw_class": "1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+      "fw_type": 2,
+      "fw_type_name": "DEVICE_FIRMWARE",
+      "fw_version": 65804,
+      "fw_version_formatted": "0.1.12",
+      "lowest_supported_fw_version": 65536,
+      "lowest_supported_fw_version_formatted": "0.1.0",
+      "capsule_flags": 15,
+      "last_attempt_version": 65804,
+      "last_attempt_status": 0,
+      "last_attempt_status_name": "SUCCESS"
+    }
+  ]
+}

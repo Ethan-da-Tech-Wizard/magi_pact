@@ -1,6 +1,6 @@
 # Production Brief & Active Objectives
 
-**Host:** Ethan (Seat 00)
+**Host:** Host-Alpha (Seat 00)
 **Initialized:** 2026-11-14T20:36:18Z
 
 ## Current Mission

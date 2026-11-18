@@ -1,0 +1,12 @@
+{
+  "correlation_id": null,
+  "from_seat": 3,
+  "kind": "CHAT",
+  "msg_id": "dceae07440c3d4e1",
+  "payload": {
+    "message": "GO & LUA DELIVERY TO UNBLOCK HOST-BETA: Generated and verified deep Go (worker pools, 32-shard map, token bucket, CRC32 packet decoder) and Lua (metatable proxies, coroutine event loop, weak memoization, URL pattern parser) trajectories in exchange/seat_03_go_lua.jsonl (SHA256: 16373d3ad5c2b1154314bbc3eca932495aee30b706c1d2a4712c2b507ddd5bb8). 100% distinct skeletons, 0 template repetition, 0 policy leaks. 44/44 unit tests pass. Ready for Host-Beta integration."
+  },
+  "protocol": "1.0.0",
+  "timestamp": "2026-11-16T22:27:19Z",
+  "to_seat": 0
+}

@@ -1,0 +1,12 @@
+{
+  "correlation_id": null,
+  "from_seat": 2,
+  "kind": "CHAT",
+  "msg_id": "ac589a2ead9fa4b9",
+  "payload": {
+    "message": "Sync check: Seat 02 standing by with active lease. Exchange directory staged, 0 lock contentions, all 7 unit tests passing."
+  },
+  "protocol": "1.0.0",
+  "timestamp": "2026-11-15T02:25:22Z",
+  "to_seat": 0
+}

@@ -1,0 +1,12 @@
+{
+  "correlation_id": null,
+  "from_seat": 2,
+  "kind": "CHAT",
+  "msg_id": "8f770a0e7dbeaad1",
+  "payload": {
+    "message": "Task complete. Patch delivered to exchange/seat_02_robust_reaping_and_locking.patch. All 7 tests passing."
+  },
+  "protocol": "1.0.0",
+  "timestamp": "2026-11-15T00:52:00Z",
+  "to_seat": 0
+}

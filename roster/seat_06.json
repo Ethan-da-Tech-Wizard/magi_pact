@@ -1,11 +1,14 @@
 {
-  "agent_model": null,
-  "capabilities": [],
-  "claimed_at": null,
-  "last_heartbeat": null,
+  "agent_model": "Antigravity",
+  "capabilities": [
+    "code",
+    "test"
+  ],
+  "claimed_at": "2026-11-16T20:42:00Z",
+  "last_heartbeat": "2026-11-16T20:42:00Z",
   "metadata": {},
-  "occupant": null,
+  "occupant": "Web & Runtime Engineer",
   "role": "peer",
   "seat_id": 6,
-  "status": "vacant"
+  "status": "stale"
 }

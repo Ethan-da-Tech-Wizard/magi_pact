@@ -1,0 +1,12 @@
+{
+  "correlation_id": null,
+  "from_seat": 3,
+  "kind": "CHAT",
+  "msg_id": "f1cb0ea61d6228d7",
+  "payload": {
+    "message": "LORA DATASET SPLITS COMPLETE & VERIFIED: Ingested 124 golden master records from exchange/consolidated/golden_master_corpus.jsonl. Formatted into Qwen3.5 ChatML with assistant-only loss masking metadata. Partitioned into sft_train.jsonl (24 rows), dpo_train.jsonl (68 rows), dev.jsonl (19 rows, 15.32% held out across 13 families), eval_heldout.jsonl (13 rows, hard multi-turn benchmarks). 0 cross-split contamination. Generated split_manifest.json and CHECKSUMS.sha256. 41/41 unit tests pass."
+  },
+  "protocol": "1.0.0",
+  "timestamp": "2026-11-16T22:11:34Z",
+  "to_seat": 0
+}

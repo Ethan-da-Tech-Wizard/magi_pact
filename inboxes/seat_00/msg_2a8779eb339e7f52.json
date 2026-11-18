@@ -1,0 +1,12 @@
+{
+  "correlation_id": null,
+  "from_seat": 3,
+  "kind": "CHAT",
+  "msg_id": "2a8779eb339e7f52",
+  "payload": {
+    "message": "LORA PRODUCTION SPLITS SEALED: 124 rows partitioned into sft_train (24 rows), dpo_train (68 rows), dev (19 rows), and eval_heldout (13 rows). Qwen3.5 ChatML format applied with assistant-only loss masking and exact token spans. 0 eval contamination, 0 policy leaks, 41/41 unit tests pass. Ready for adapter training."
+  },
+  "protocol": "1.0.0",
+  "timestamp": "2026-11-16T22:12:06Z",
+  "to_seat": 0
+}

@@ -1,0 +1,206 @@
+{
+  "job_id": "job-train-1794861872",
+  "status": "COMPLETED",
+  "stages": {
+    "sft_preflight": {
+      "vram_calc": {
+        "model_params_billion": 7.6,
+        "rank": 16,
+        "micro_batch_size": 1,
+        "gradient_checkpointing": true,
+        "optimizer": "paged_adamw_8bit",
+        "load_in_4bit": true,
+        "breakdown_mb": {
+          "base_model": 3986.36,
+          "lora_weights": 76.25,
+          "lora_gradients": 76.25,
+          "optimizer_states": 76.25,
+          "activation_buffers": 768.0,
+          "cuda_context_overhead": 750.0
+        },
+        "total_vram_mb": 5733.11,
+        "total_vram_gb": 5.599,
+        "max_allowed_mb": 7372.8,
+        "max_allowed_gb": 7.2,
+        "headroom_mb": 2458.89,
+        "fits_within_budget": true,
+        "total_lora_trainable_params": 39976960
+      },
+      "thermal": {
+        "state": "NOMINAL",
+        "temp": 45.0,
+        "message": "Operating within nominal thermal bounds (45.0\u00b0C)."
+      },
+      "concurrency": {
+        "active": [
+          "job-train-1794861872"
+        ],
+        "max": 2
+      }
+    },
+    "sft_training": {
+      "recipe": {
+        "recipe_id": "lora-sft-rtx3070-v1",
+        "base_model": "Qwen/Qwen2.5-Coder-7B-Instruct",
+        "is_abliterated": false,
+        "target_modules": [
+          "q_proj",
+          "k_proj",
+          "v_proj",
+          "o_proj",
+          "gate_proj",
+          "up_proj",
+          "down_proj"
+        ],
+        "rank": 16,
+        "alpha": 32,
+        "learning_rate": 0.00015,
+        "lr_scheduler": "cosine",
+        "warmup_ratio": 0.03,
+        "weight_decay": 0.01,
+        "micro_batch_size": 1,
+        "gradient_accumulation_steps": 16,
+        "optimizer": "paged_adamw_8bit",
+        "gradient_checkpointing": true,
+        "max_seq_length": 2048,
+        "lora_dropout": 0.05,
+        "load_in_4bit": true,
+        "quant_type": "nf4",
+        "use_double_quant": true,
+        "torch_dtype": "bfloat16",
+        "dataset_path": "data/datasets/golden_multilang_corpus.jsonl",
+        "output_dir": "exchange/adapters/sft",
+        "epochs": 3
+      },
+      "peak_temp_c": 45.0,
+      "status": "SUCCESS"
+    },
+    "dpo_training": {
+      "recipe": {
+        "recipe_id": "lora-dpo-rtx3070-v1",
+        "base_model": "Qwen/Qwen2.5-Coder-7B-Instruct",
+        "is_abliterated": false,
+        "target_modules": [
+          "q_proj",
+          "k_proj",
+          "v_proj",
+          "o_proj",
+          "gate_proj",
+          "up_proj",
+          "down_proj"
+        ],
+        "rank": 16,
+        "alpha": 32,
+        "learning_rate": 5e-05,
+        "beta": 0.1,
+        "lr_scheduler": "cosine",
+        "warmup_ratio": 0.05,
+        "weight_decay": 0.01,
+        "micro_batch_size": 1,
+        "gradient_accumulation_steps": 16,
+        "optimizer": "paged_adamw_8bit",
+        "gradient_checkpointing": true,
+        "max_seq_length": 2048,
+        "max_prompt_length": 1024,
+        "max_target_length": 1024,
+        "lora_dropout": 0.05,
+        "load_in_4bit": true,
+        "quant_type": "nf4",
+        "use_double_quant": true,
+        "torch_dtype": "bfloat16",
+        "dataset_path": "data/datasets/golden_multilang_corpus.jsonl",
+        "sft_adapter_path": "exchange/adapters/sft",
+        "output_dir": "exchange/adapters/dpo",
+        "epochs": 2
+      },
+      "peak_temp_c": 45.0,
+      "status": "SUCCESS"
+    },
+    "gguf_pipeline": {
+      "pipeline": "GGUF_LoRA_Conversion",
+      "base_model": "Qwen/Qwen2.5-Coder-7B-Instruct",
+      "is_abliterated": false,
+      "profile_id": null,
+      "adapter_path": "exchange/adapters/dpo",
+      "adapter_gguf": "/Users/admin/magi_pact/exchange/gguf/adapter_lora.gguf",
+      "merged_fp16_gguf": "/Users/admin/magi_pact/exchange/gguf/model_merged.gguf",
+      "quantized_outputs": {
+        "Q4_K_M": "/Users/admin/magi_pact/exchange/gguf/model.Q4_K_M.gguf",
+        "Q8_0": "/Users/admin/magi_pact/exchange/gguf/model.Q8_0.gguf"
+      },
+      "commands": [
+        "python3 /opt/llama.cpp/convert_lora_to_gguf.py exchange/adapters/dpo --outtype f16 --outfile /Users/admin/magi_pact/exchange/gguf/adapter_lora.gguf",
+        "python3 /opt/llama.cpp/export_lora.py --base Qwen/Qwen2.5-Coder-7B-Instruct --lora exchange/adapters/dpo --outtype f16 --outfile /Users/admin/magi_pact/exchange/gguf/model_merged.gguf",
+        "/opt/llama.cpp/llama-quantize /Users/admin/magi_pact/exchange/gguf/model_merged.gguf /Users/admin/magi_pact/exchange/gguf/model.Q4_K_M.gguf Q4_K_M",
+        "/opt/llama.cpp/llama-quantize /Users/admin/magi_pact/exchange/gguf/model_merged.gguf /Users/admin/magi_pact/exchange/gguf/model.Q8_0.gguf Q8_0"
+      ],
+      "cloud_cost": 0.0,
+      "quant_formats": [
+        "Q4_K_M",
+        "Q8_0"
+      ]
+    }
+  },
+  "history": [
+    {
+      "from": "IDLE",
+      "to": "INITIALIZING",
+      "detail": "Starting pre-flight check",
+      "timestamp": 1794861872.653502
+    },
+    {
+      "from": "INITIALIZING",
+      "to": "PRE_FLIGHT_PASSED",
+      "detail": "Pre-flight checks passed",
+      "timestamp": 1794861872.65545
+    },
+    {
+      "from": "PRE_FLIGHT_PASSED",
+      "to": "SFT_TRAINING",
+      "detail": "Executing SFT training stage",
+      "timestamp": 1794861872.655457
+    },
+    {
+      "from": "SFT_TRAINING",
+      "to": "SFT_COMPLETED",
+      "detail": "SFT training finished successfully",
+      "timestamp": 1794861872.656755
+    },
+    {
+      "from": "SFT_COMPLETED",
+      "to": "INITIALIZING",
+      "detail": "Starting pre-flight check",
+      "timestamp": 1794861872.656758
+    },
+    {
+      "from": "INITIALIZING",
+      "to": "PRE_FLIGHT_PASSED",
+      "detail": "Pre-flight checks passed",
+      "timestamp": 1794861872.658085
+    },
+    {
+      "from": "PRE_FLIGHT_PASSED",
+      "to": "DPO_TRAINING",
+      "detail": "Executing DPO preference optimization stage",
+      "timestamp": 1794861872.6580942
+    },
+    {
+      "from": "DPO_TRAINING",
+      "to": "DPO_COMPLETED",
+      "detail": "DPO training finished successfully",
+      "timestamp": 1794861872.659276
+    },
+    {
+      "from": "DPO_COMPLETED",
+      "to": "GGUF_CONVERTING",
+      "detail": "Generating GGUF Q4_K_M and Q8_0 pipeline",
+      "timestamp": 1794861872.6592798
+    },
+    {
+      "from": "GGUF_CONVERTING",
+      "to": "COMPLETED",
+      "detail": "All pipeline stages completed",
+      "timestamp": 1794861872.65936
+    }
+  ]
+}
