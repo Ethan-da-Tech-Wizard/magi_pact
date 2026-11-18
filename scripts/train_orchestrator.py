@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# Program: magi_pact - train_orchestrator.py
+# Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+# Last Modified: 2026-11-18
+# Purpose: Orchestrates local LoRA SFT/DPO training and GGUF quantization under VRAM, concurrency and thermal limits.
 """Magi Pact: LoRA SFT/DPO Training & GGUF Quantization Orchestrator.
 
 Enforces:
@@ -18,6 +22,7 @@ from pathlib import Path
 import sys
 
 # Ensure pact is in sys.path
+# Repo root is one level above scripts/.
 SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT_DIR = SCRIPT_DIR.parent
 if str(ROOT_DIR) not in sys.path:
@@ -42,6 +47,7 @@ from pact.abli import AbliteratedRegistry
 
 def cmd_budget(args):
     """Calculates and reports exact VRAM memory breakdown."""
+    # Fall back to the default LoRA rank when none is given.
     rank = args.rank or 16
     res = VRAMBudgetGuard.calculate_memory_footprint(
         model_params_billion=args.params_b,
@@ -107,6 +113,7 @@ def cmd_recipes(args):
     recipes_dir = ROOT_DIR / "data" / "training_recipes"
     recipes_dir.mkdir(parents=True, exist_ok=True)
 
+    # Choose between the vanilla base model and the abliterated variant.
     is_abli = args.abli
     base_model = args.base_model
     if is_abli and not base_model:
@@ -121,6 +128,7 @@ def cmd_recipes(args):
         rank=args.rank or 16,
         alpha=args.alpha or 32,
     )
+    # validate() checks the recipe against the training rules.
     sft.validate()
 
     dpo = DPORecipe(
@@ -219,6 +227,7 @@ def cmd_run(args):
         sft_recipe=sft,
         dpo_recipe=dpo,
         export_gguf=not args.no_gguf,
+        # Simulation mode, as passed by the code: no real training is launched here.
         simulate=True,
     )
 
@@ -237,6 +246,7 @@ def cmd_run(args):
 
 
 def main():
+    """Command-line entry point: parse arguments and run the training and quantization orchestration."""
     parser = argparse.ArgumentParser(description="LoRA Training, Thermal Guard & GGUF Pipeline Orchestrator")
     sub = parser.add_subparsers(dest="command")
 
@@ -282,6 +292,7 @@ def main():
         parser.print_help()
         sys.exit(0)
 
+    # Map each subcommand name to its handler function.
     dispatch = {
         "budget": cmd_budget,
         "thermal": cmd_thermal,

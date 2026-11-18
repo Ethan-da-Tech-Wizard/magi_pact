@@ -1,12 +1,7 @@
-# ==============================================================================
-# Program: herder.py
-# Programmer: Ethan-da-Tech-Wizard
-# Last Modified: November 18, 2026
-# Purpose: Operational supervisor and lifecycle manager for Magi Pact.
-#          Manages 32-seat mesh roster allocations, heartbeat leases, stale seat
-#          reclamation, distributed advisory file claims, and atomic JSON
-#          message journaling without a centralized master server.
-# ==============================================================================
+# Program: magi_pact - herder.py
+# Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+# Last Modified: 2026-11-18
+# Purpose: Supervisor for the 32-seat mesh: seat roster, heartbeat leases, stale-seat reclamation, advisory file claims and a JSON message journal.
 
 """Herder / Operational Supervisor for Magi Pact.
 

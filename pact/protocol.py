@@ -1,11 +1,7 @@
-# ==============================================================================
-# Program: protocol.py
-# Programmer: Ethan-da-Tech-Wizard
-# Last Modified: November 18, 2026
-# Purpose: Defines the core communication protocol, message envelope schemas,
-#          deterministic seat state definitions, and cryptographic identifiers
-#          for the 32-Seat Magi Pact Serverless Consensus Mesh.
-# ==============================================================================
+# Program: magi_pact - protocol.py
+# Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+# Last Modified: 2026-11-18
+# Purpose: Message envelope schemas, seat state definitions and identifiers for the 32-seat mesh protocol.
 
 """Protocol Definitions and Envelopes for Magi Pact (32-Seat Federated Mesh).
 

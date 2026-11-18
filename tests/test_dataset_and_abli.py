@@ -1,3 +1,7 @@
+# Program: magi_pact - test_dataset_and_abli.py
+# Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+# Last Modified: 2026-11-18
+# Purpose: Unit tests for multi-language dataset generation, shard export/reconciliation, and the abliterated model registry.
 """Unit tests for Multi-Language Dataset Curation and Abliterated Model Registry."""
 import json
 import shutil
@@ -15,14 +19,18 @@ from pact.abli import AbliteratedRegistry, DEFAULT_PROFILES
 
 
 class TestDatasetAndAbli(unittest.TestCase):
+    """Test case group: DatasetAndAbli behaviour."""
     def setUp(self):
+        """Prepare a fresh fixture before each test."""
         self.test_dir = tempfile.mkdtemp()
         self.root = Path(self.test_dir)
 
     def tearDown(self):
+        """Clean up the fixture after each test."""
         shutil.rmtree(self.test_dir, ignore_errors=True)
 
     def test_multi_language_matrix_coverage(self):
+        """Check: multi language matrix coverage."""
         pairs = generate_language_matrix()
         self.assertGreaterEqual(len(pairs), 14)
         domains_present = {p.domain for p in pairs}
@@ -38,6 +46,7 @@ class TestDatasetAndAbli(unittest.TestCase):
 
     def test_shard_export_and_non_overwrite_reconciliation(self):
         # 1. Export shard from Seat 01 and Seat 02
+        """Check: shard export and non overwrite reconciliation."""
         s1 = export_seat_shard(1, self.root)
         s2 = export_seat_shard(2, self.root)
 
@@ -64,6 +73,7 @@ class TestDatasetAndAbli(unittest.TestCase):
         self.assertEqual(len(lines), 14)
 
     def test_abliterated_registry_and_hardware_detection(self):
+        """Check: abliterated registry and hardware detection."""
         reg = AbliteratedRegistry(self.root)
         hw = reg.detect_hardware()
         self.assertIn("system", hw)
@@ -88,6 +98,7 @@ class TestDatasetAndAbli(unittest.TestCase):
                 self.assertFalse(p["active"])
 
     def test_abliterated_profiles_share_golden_corpus_reference(self):
+        """Check: abliterated profiles share golden corpus reference."""
         reg = AbliteratedRegistry(self.root)
         profiles = reg.list_profiles()["profiles"]
         for p in profiles:

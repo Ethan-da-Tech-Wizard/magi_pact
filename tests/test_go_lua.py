@@ -1,3 +1,7 @@
+# Program: magi_pact - test_go_lua.py
+# Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+# Last Modified: 2026-11-18
+# Purpose: Unit tests for the Go and Lua trajectory engines, checking structure, uniqueness and absence of policy leaks.
 """Unit tests for Go and Lua Language Trajectory Engines.
 
 Verifies:
@@ -12,7 +16,9 @@ from pact.fleet_dedup import FleetDedupEngine
 
 class TestGoLuaEngines(unittest.TestCase):
 
+    """Test case group: GoLuaEngines behaviour."""
     def test_go_problems_structure(self):
+        """Check: go problems structure."""
         self.assertGreaterEqual(len(GO_PROBLEMS), 4)
         for p in GO_PROBLEMS:
             self.assertTrue(p.id.startswith("GO-"))
@@ -25,6 +31,7 @@ class TestGoLuaEngines(unittest.TestCase):
             self.assertEqual(len(FleetDedupEngine.scan_for_leaks(p.prompt)), 0)
 
     def test_lua_problems_structure(self):
+        """Check: lua problems structure."""
         self.assertGreaterEqual(len(LUA_PROBLEMS), 4)
         for p in LUA_PROBLEMS:
             self.assertTrue(p.id.startswith("LUA-"))
@@ -35,6 +42,7 @@ class TestGoLuaEngines(unittest.TestCase):
             self.assertEqual(len(FleetDedupEngine.scan_for_leaks(p.prompt)), 0)
 
     def test_go_lua_corpus_dedup_gate(self):
+        """Check: go lua corpus dedup gate."""
         go_rec = generate_go_corpus()
         lua_rec = generate_lua_corpus()
         all_rec = go_rec + lua_rec

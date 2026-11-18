@@ -1,3 +1,8 @@
+# Program: magi_pact - compiler_harness.py
+# Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+# Last Modified: 2026-11-18
+# Purpose: Builds and tests C, C++, C#, Rust and Go samples in isolated scratch directories and emits reproducible verification receipts.
+
 """Compiler & Harness Verification Engine.
 
 Validates 100% build and test execution for C, C++, C#, Rust, and Go in isolated sandboxes.
@@ -17,6 +22,7 @@ from typing import Dict, List, Optional, Tuple, Any
 
 @dataclass
 class ToolchainInfo:
+    """Describes one detected compiler toolchain for a language."""
     language: str
     compiler: str
     version: str
@@ -25,6 +31,7 @@ class ToolchainInfo:
 
 @dataclass
 class VerificationReceipt:
+    """Reproducible record of one build-and-test run: exit codes, timing and content hashes."""
     test_id: str
     language: str
     source_sha256: str
@@ -101,6 +108,7 @@ class IsolatedSandboxRunner:
     """Executes sandboxed compilations and tests in isolated scratch environments."""
 
     def __init__(self, workspace_root: Optional[Path] = None):
+        """Set up the scratch directory used for sandboxed builds, creating it if needed."""
         self.workspace_root = workspace_root or Path(__file__).resolve().parent.parent
         self.scratch_dir = self.workspace_root / "data" / "sandbox_scratch"
         self.scratch_dir.mkdir(parents=True, exist_ok=True)

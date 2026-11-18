@@ -1,3 +1,8 @@
+# Program: magi_pact - systems_firmware.py
+# Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+# Last Modified: 2026-11-18
+# Purpose: Generates and exports systems and firmware training trajectories (Bash, Arch, RPM-based Linux, UEFI read-only, Git).
+
 """Systems & Firmware Trajectory Engine.
 
 Generates verified execution-grade trajectories for:
@@ -17,6 +22,7 @@ from typing import Dict, List, Optional, Tuple, Any
 
 @dataclass
 class SystemsTrajectory:
+    """One systems or firmware training example with its chosen and rejected answers."""
     trajectory_id: str
     subsystem: str  # "bash" | "arch_pkg" | "fedora_dnf5" | "bios_uefi_ro" | "git_worktree"
     title: str

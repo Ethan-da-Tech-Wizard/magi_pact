@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# Program: magi_pact - setup.py
+# Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+# Last Modified: 2026-11-18
+# Purpose: Packaging script that declares the magi-pact distribution and its console entry points.
 from setuptools import setup, find_packages
 
 setup(

@@ -1,3 +1,7 @@
+# Program: magi_pact - test_dataset_splits.py
+# Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+# Last Modified: 2026-11-18
+# Purpose: Unit tests for the dataset splitter, the ChatML formatter, and assistant-only loss masking.
 """Unit tests for LoRA Dataset Splitter, Qwen3.5 ChatML Formatter, and Loss Masking."""
 
 import hashlib
@@ -16,12 +20,15 @@ from pact.splits import (
 
 
 class TestDatasetSplits(unittest.TestCase):
+    """Test case group: DatasetSplits behaviour."""
     def setUp(self):
+        """Prepare a fresh fixture before each test."""
         self.root_dir = Path(__file__).resolve().parent.parent
         self.corpus_path = self.root_dir / "exchange" / "consolidated" / "golden_master_corpus.jsonl"
         self.splitter = DatasetSplitter(root_dir=self.root_dir)
 
     def test_qwen_chatml_sft_formatter(self):
+        """Check: qwen chatml sft formatter."""
         record = {
             "id": "TEST_SFT_01",
             "prompt": "Write a thread-safe counter in C.",
@@ -56,6 +63,7 @@ class TestDatasetSplits(unittest.TestCase):
         self.assertEqual(text[s:e], f"int counter = 0;\npthread_mutex_t lock;{IM_END}")
 
     def test_qwen_chatml_dpo_formatter(self):
+        """Check: qwen chatml dpo formatter."""
         record = {
             "id": "TEST_DPO_01",
             "prompt": "Safely increment shared state in Go.",
@@ -78,6 +86,7 @@ class TestDatasetSplits(unittest.TestCase):
         self.assertEqual(res["text_rejected"][r_spans[0]["start"]:r_spans[0]["end"]], f"state++{IM_END}")
 
     def test_qwen_chatml_multiturn_formatter(self):
+        """Check: qwen chatml multiturn formatter."""
         record = {
             "id": "TEST_MULTI_01",
             "prompt": "Multi-turn task",
@@ -99,6 +108,7 @@ class TestDatasetSplits(unittest.TestCase):
         self.assertEqual(res["text"][spans[1]["start"]:spans[1]["end"]], f"impl Drop for ThreadPool {{ ... }}{IM_END}")
 
     def test_corpus_partition_and_splits_counts(self):
+        """Check: corpus partition and splits counts."""
         records = self.splitter.load_corpus(self.corpus_path)
         self.assertEqual(len(records), 124)
 
@@ -118,6 +128,7 @@ class TestDatasetSplits(unittest.TestCase):
         self.assertTrue(0.14 <= res.dev_ratio <= 0.16)
 
     def test_task_family_domain_coverage(self):
+        """Check: task family domain coverage."""
         records = self.splitter.load_corpus(self.corpus_path)
         res = self.splitter.partition_records(records)
 
@@ -141,6 +152,7 @@ class TestDatasetSplits(unittest.TestCase):
         self.assertEqual(train_domains, expected_domains)
 
     def test_zero_cross_split_contamination(self):
+        """Check: zero cross split contamination."""
         records = self.splitter.load_corpus(self.corpus_path)
         res = self.splitter.partition_records(records)
 
@@ -163,6 +175,7 @@ class TestDatasetSplits(unittest.TestCase):
         self.assertEqual(len(dev_ids & eval_ids), 0)
 
     def test_export_splits_and_checksum_verification(self):
+        """Check: export splits and checksum verification."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             out_path = Path(tmp_dir)
             records = self.splitter.load_corpus(self.corpus_path)
@@ -185,6 +198,7 @@ class TestDatasetSplits(unittest.TestCase):
                 self.assertEqual(exp_sha, act_sha, f"Checksum mismatch for {fname}")
 
     def test_production_splits_exist_and_verified(self):
+        """Check: production splits exist and verified."""
         datasets_dir = self.root_dir / "data" / "datasets"
         manifest_path = datasets_dir / "split_manifest.json"
         chk_path = datasets_dir / "CHECKSUMS.sha256"

@@ -1,3 +1,7 @@
+# Program: magi_pact - test_web_runtime.py
+# Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+# Last Modified: 2026-11-18
+# Purpose: Unit tests for the web and modern runtime specs (CSS, HTML, TypeScript) including export integrity and checksums.
 """Unit tests for Web & Modern Runtime trajectories and specs.
 
 Verifies:
@@ -26,6 +30,7 @@ from pact.dedup import PolicyLeakScanner
 
 class TestWebRuntime(unittest.TestCase):
 
+    """Test case group: WebRuntime behaviour."""
     def test_specs_count_and_rules(self):
         """All 12 specs must exist and satisfy their validation rules."""
         self.assertEqual(len(WEB_SPECS), 12)

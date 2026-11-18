@@ -1,3 +1,8 @@
+# Program: magi_pact - fleet_dedup.py
+# Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+# Last Modified: 2026-11-18
+# Purpose: Audits and consolidates multi-seat corpus files with prompt deduplication and leak guards.
+
 """Fleet Integration & Cross-Box Deduplication Engine.
 
 Provides:
@@ -20,6 +25,7 @@ from typing import Dict, List, Optional, Set, Tuple, Any
 
 @dataclass
 class DedupReport:
+    """Summary of a dedup audit: row counts, uniqueness ratios, leak findings and whether the gate passed."""
     total_rows: int
     raw_unique_prompts: int
     skeleton_unique_prompts: int

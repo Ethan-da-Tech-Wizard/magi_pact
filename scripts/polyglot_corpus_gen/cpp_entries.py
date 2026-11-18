@@ -1,11 +1,17 @@
+# Program: magi_pact - cpp_entries.py
+# Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+# Last Modified: 2026-11-18
+# Purpose: Holds the hand-written C++ training entries (SFT and DPO records) used by the polyglot corpus builder.
 """C++ Language Dataset Entries: 6 SFT + 6 DPO (Total 12)
 All chosen/completion programs are compilable with clang++ -std=c++17 -Wall -Wextra -Werror and contain self-testing assertions in main().
 """
 
 from datetime import datetime, timezone
 
+# One timestamp shared by every entry in this module.
 NOW = datetime.now(timezone.utc).isoformat()
 
+# Ordered list of records: six SFT (instruction -> completion) then six DPO (prompt, chosen, rejected).
 CPP_ENTRIES = [
     # ------------------ SFT 001 ------------------
     {

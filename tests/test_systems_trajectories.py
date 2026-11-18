@@ -1,3 +1,7 @@
+# Program: magi_pact - test_systems_trajectories.py
+# Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+# Last Modified: 2026-11-18
+# Purpose: Unit tests for the systems and firmware trajectories, the firmware safety gate, and shard reconciliation.
 """Comprehensive unit tests for Systems & Firmware Architect Trajectories and Guardrails."""
 
 import hashlib
@@ -23,7 +27,9 @@ from pact.systems import (
 
 
 class TestSystemsTrajectories(unittest.TestCase):
+    """Test case group: SystemsTrajectories behaviour."""
     def setUp(self):
+        """Prepare a fresh fixture before each test."""
         self.test_dir = tempfile.mkdtemp()
         self.root = Path(self.test_dir)
         # Copy fixtures over to test directory
@@ -35,9 +41,11 @@ class TestSystemsTrajectories(unittest.TestCase):
                 shutil.copy(f, dest_fixtures / f.name)
 
     def tearDown(self):
+        """Clean up the fixture after each test."""
         shutil.rmtree(self.test_dir, ignore_errors=True)
 
     def test_systems_trajectory_generation_and_counts(self):
+        """Check: systems trajectory generation and counts."""
         pairs = generate_systems_trajectories()
         self.assertEqual(len(pairs), 15)
 
@@ -63,6 +71,7 @@ class TestSystemsTrajectories(unittest.TestCase):
             self.assertEqual(len(p.sha256), 64)
 
     def test_bash_safety_validator_on_trajectories(self):
+        """Check: bash safety validator on trajectories."""
         for ex in SYSTEMS_TRAJECTORIES:
             if ex["domain"] == "bash_posix":
                 chosen_res = BashSafetyValidator.validate(ex["chosen"])
@@ -75,6 +84,7 @@ class TestSystemsTrajectories(unittest.TestCase):
                 self.assertFalse(rejected_res["valid"], "Rejected script should have failed safety validation")
 
     def test_arch_pkgbuild_validator_on_trajectories(self):
+        """Check: arch pkgbuild validator on trajectories."""
         for ex in SYSTEMS_TRAJECTORIES:
             if ex["domain"] == "arch_linux":
                 chosen_res = ArchPkgbuildValidator.validate(ex["chosen"])
@@ -85,6 +95,7 @@ class TestSystemsTrajectories(unittest.TestCase):
                 self.assertFalse(rejected_res["valid"], "Rejected PKGBUILD should fail validation")
 
     def test_fedora_dnf5_validator_on_trajectories(self):
+        """Check: the dnf5 validator on trajectories."""
         for ex in SYSTEMS_TRAJECTORIES:
             if ex["domain"] == "fedora_linux":
                 rejected_res = FedoraDnf5Validator.validate_command(ex["rejected"])
@@ -92,6 +103,7 @@ class TestSystemsTrajectories(unittest.TestCase):
 
     def test_firmware_safety_gate_blocks_destructive_hardware_actions(self):
         # Read-only and status inspections must pass
+        """Check: firmware safety gate blocks destructive hardware actions."""
         safe_cmds = [
             "fwupdmgr get-devices --json",
             "fwupdmgr get-updates",
@@ -116,6 +128,7 @@ class TestSystemsTrajectories(unittest.TestCase):
                 FirmwareSafetyGate.verify_command_safety(cmd)
 
     def test_fwupd_read_only_device_fixture_parsing(self):
+        """Check: fwupd read only device fixture parsing."""
         fixture_path = self.root / "data" / "fixtures" / "fwupd_devices.json"
         self.assertTrue(fixture_path.exists())
         data = FwupdFixtureParser.load_fixture(fixture_path)
@@ -136,6 +149,7 @@ class TestSystemsTrajectories(unittest.TestCase):
         self.assertEqual(sys_fw["version_lowest"], "0.1.0")
 
     def test_uefi_esrt_fixture_parsing_and_anti_rollback(self):
+        """Check: uefi esrt fixture parsing and anti rollback."""
         fixture_path = self.root / "data" / "fixtures" / "uefi_esrt.json"
         self.assertTrue(fixture_path.exists())
         data = FwupdFixtureParser.load_fixture(fixture_path)
@@ -147,6 +161,7 @@ class TestSystemsTrajectories(unittest.TestCase):
             self.assertEqual(e["status"], "SUCCESS")
 
     def test_git_worktree_porcelain_parser(self):
+        """Check: git worktree porcelain parser."""
         mock_porcelain = (
             "worktree /Users/admin/magi_pact\n"
             "HEAD 938898f5c41d84385102d09c9cb26d26c8a795a0\n"
@@ -170,6 +185,7 @@ class TestSystemsTrajectories(unittest.TestCase):
 
     def test_shard_export_and_multi_seat_reconciliation(self):
         # 1. Export seat 03 baseline shard
+        """Check: shard export and multi seat reconciliation."""
         export_seat_shard(3, self.root)
 
         # 2. Export seat 04 systems & firmware shard
@@ -190,6 +206,7 @@ class TestSystemsTrajectories(unittest.TestCase):
         self.assertEqual(res["domains_covered"], 14)
 
     def test_systems_corpus_dataset_integrity(self):
+        """Check: systems corpus dataset integrity."""
         corpus_path = Path("data/corpus/systems/systems_corpus.jsonl")
         self.assertTrue(corpus_path.exists(), "systems_corpus.jsonl must exist")
 

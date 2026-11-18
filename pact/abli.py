@@ -1,12 +1,7 @@
-# ==============================================================================
-# Program: abli.py
-# Programmer: Ethan-da-Tech-Wizard
-# Last Modified: November 18, 2026
-# Purpose: Abliterated Model Registry & Multi-Platform Inference Coordinator.
-#          Provides the /abli CLI orchestration layer for un-censored,
-#          orthogonalized-weight model variants across Mac (Metal/MLX),
-#          Arch Linux (CUDA/Vulkan), and Fedora (ROCm/CPU).
-# ==============================================================================
+# Program: magi_pact - abli.py
+# Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+# Last Modified: 2026-11-18
+# Purpose: Registry of abliterated model profiles and hardware detection used by the /abli inference commands.
 
 """Abliterated Model Registry & Multi-Platform Inference Coordinator.
 
@@ -23,6 +18,7 @@ from typing import Dict, Any, Optional
 
 @dataclass
 class ModelProfile:
+    """One registered model variant: its identity, target hardware, inference backend and context length."""
     id: str
     name: str
     target_hardware: str
@@ -71,19 +67,23 @@ DEFAULT_PROFILES = [
 
 
 class AbliteratedRegistry:
+    """Reads and writes the abliterated-model profile registry stored in a JSON config file under the project root."""
     def __init__(self, root_dir: Optional[Path] = None):
+        """Resolve the project root and compute the config directory and file paths."""
         self.root = Path(root_dir or ".").resolve()
         self.config_dir = self.root / "data" / "models"
         self.config_file = self.config_dir / "abli_profiles.json"
         self._ensure_config()
 
     def _ensure_config(self):
+        """Create the config directory and a default registry file if they do not exist yet."""
         self.config_dir.mkdir(parents=True, exist_ok=True)
         if not self.config_file.exists():
             data = {"profiles": [asdict(p) for p in DEFAULT_PROFILES], "active_id": DEFAULT_PROFILES[0].id}
             self.config_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
     def detect_hardware(self) -> Dict[str, str]:
+        """Report the host OS flavor, CPU architecture and the inference backend suited to it."""
         system = platform.system()
         machine = platform.machine()
         node = platform.node()
@@ -102,6 +102,7 @@ class AbliteratedRegistry:
         }
 
     def list_profiles(self) -> Dict[str, Any]:
+        """Load and return the profile registry from the JSON config file."""
         with open(self.config_file, "r", encoding="utf-8") as f:
             data = json.load(f)
         hw = self.detect_hardware()
@@ -112,6 +113,7 @@ class AbliteratedRegistry:
         }
 
     def set_active_profile(self, profile_id: str) -> bool:
+        """Mark the named profile as active in the config file; return True on success, False if the id is unknown."""
         with open(self.config_file, "r", encoding="utf-8") as f:
             data = json.load(f)
 

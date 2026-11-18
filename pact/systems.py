@@ -1,3 +1,8 @@
+# Program: magi_pact - systems.py
+# Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+# Last Modified: 2026-11-18
+# Purpose: Golden systems trajectories with validators and read-only firmware fixtures for Bash, packaging, dnf5 and Git worktrees.
+
 """Systems & Firmware Architecture: Golden Trajectories, Validators, and Read-Only Fixtures.
 
 Covers:
@@ -83,11 +88,13 @@ class FwupdFixtureParser:
 
     @staticmethod
     def load_fixture(fixture_path: Path) -> Dict[str, Any]:
+        """Read a firmware-device fixture file and return its parsed JSON."""
         with open(fixture_path, "r", encoding="utf-8") as f:
             return json.load(f)
 
     @classmethod
     def parse_devices(cls, data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Extract a normalized list of device records from fixture data."""
         devices = data.get("Devices", [])
         parsed = []
         for dev in devices:
@@ -107,6 +114,7 @@ class FwupdFixtureParser:
 
     @classmethod
     def parse_esrt(cls, esrt_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Extract a normalized list of ESRT entries from fixture data."""
         entries = esrt_data.get("entries", [])
         results = []
         for e in entries:
@@ -135,6 +143,7 @@ class BashSafetyValidator:
 
     @classmethod
     def validate(cls, script: str) -> Dict[str, Any]:
+        """Check a Bash script for strict-mode flags and other safety practices; return the issues found."""
         issues = []
         # Check strict error flags
         has_strict_flags = bool(
@@ -173,6 +182,7 @@ class ArchPkgbuildValidator:
 
     @classmethod
     def validate(cls, pkgbuild_content: str) -> Dict[str, Any]:
+        """Check PKGBUILD text for mandatory variables and packaging best practices; return the issues found."""
         issues = []
         for var in cls.MANDATORY_VARS:
             pattern = rf"^{var}="
@@ -211,6 +221,7 @@ class FedoraDnf5Validator:
 
     @classmethod
     def validate_command(cls, cmd: str) -> Dict[str, Any]:
+        """Check a dnf5 command line for modern dnf5 usage and rollback safety; return the issues found."""
         issues = []
         is_dnf5 = "dnf5" in cmd
 
@@ -244,6 +255,7 @@ class GitWorktreeManager:
 
     @staticmethod
     def parse_worktree_porcelain(porcelain_output: str) -> List[Dict[str, Any]]:
+        """Parse `git worktree list --porcelain` output into a list of worktree records."""
         worktrees = []
         current: Dict[str, Any] = {}
 

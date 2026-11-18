@@ -1,3 +1,8 @@
+# Program: magi_pact - training.py
+# Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+# Last Modified: 2026-11-18
+# Purpose: LoRA SFT and DPO recipes with thermal and concurrency guards and a training orchestrator state machine.
+
 """LoRA Training, Quantization, Thermal Guard, and GGUF Pipeline Engine.
 
 Implements SFT and DPO training recipes for local NVIDIA GeForce RTX 3070 (8GB VRAM)
@@ -44,6 +49,7 @@ LORA_TARGET_MODULES = [
 
 
 class ThermalState(str, Enum):
+    """Thermal status levels used by the guard, from nominal to emergency."""
     NOMINAL = "NOMINAL"
     WARNING = "WARNING"
     PAUSED = "PAUSED"
@@ -51,6 +57,7 @@ class ThermalState(str, Enum):
 
 
 class OrchestratorState(str, Enum):
+    """States of the training orchestrator state machine."""
     IDLE = "IDLE"
     INITIALIZING = "INITIALIZING"
     PRE_FLIGHT_PASSED = "PRE_FLIGHT_PASSED"
@@ -87,6 +94,7 @@ class ThermalEmergencyHaltError(RuntimeError):
 
 @dataclass
 class SFTRecipe:
+    """Locked-down LoRA SFT hyperparameters for the 8 GB GPU target."""
     recipe_id: str = "lora-sft-rtx3070-v1"
     base_model: str = "Qwen/Qwen2.5-Coder-7B-Instruct"
     is_abliterated: bool = False
@@ -112,6 +120,7 @@ class SFTRecipe:
     epochs: int = 3
 
     def validate(self):
+        """Assert that the SFT settings still match the required values."""
         assert self.learning_rate == 1.5e-4, f"SFT learning rate must be 1.5e-4, got {self.learning_rate}"
         assert self.micro_batch_size == 1, f"Micro-batch size must be 1, got {self.micro_batch_size}"
         assert 16 <= self.rank <= 32, f"Rank r must be in range [16, 32], got {self.rank}"
@@ -123,6 +132,7 @@ class SFTRecipe:
 
 @dataclass
 class DPORecipe:
+    """Locked-down LoRA DPO hyperparameters for the 8 GB GPU target."""
     recipe_id: str = "lora-dpo-rtx3070-v1"
     base_model: str = "Qwen/Qwen2.5-Coder-7B-Instruct"
     is_abliterated: bool = False
@@ -152,6 +162,7 @@ class DPORecipe:
     epochs: int = 2
 
     def validate(self):
+        """Assert that the DPO settings still match the required values."""
         assert self.learning_rate == 5.0e-5, f"DPO learning rate must be 5e-5, got {self.learning_rate}"
         assert self.micro_batch_size == 1, f"Micro-batch size must be 1, got {self.micro_batch_size}"
         assert 16 <= self.rank <= 32, f"Rank r must be in range [16, 32], got {self.rank}"
@@ -308,11 +319,13 @@ class ThermalAndConcurrencyGuard:
     """Enforces max 2 concurrent runs and respects the 96°C thermal guard."""
 
     def __init__(self, root_dir: Optional[Path] = None, mock_temp: Optional[float] = None):
+        """Set up the slot-file path and an optional mock temperature used in place of a real sensor reading."""
         self.root = Path(root_dir or ".").resolve()
         self.slots_file = self.root / "board" / "concurrency_slots.json"
         self._mock_temp = mock_temp
 
     def _ensure_slots_file(self):
+        """Create the concurrency slots file with an empty slot list if it is missing."""
         self.slots_file.parent.mkdir(parents=True, exist_ok=True)
         if not self.slots_file.exists():
             data = {"active_slots": [], "max_slots": MAX_CONCURRENT_SLOTS}
@@ -360,6 +373,7 @@ class ThermalAndConcurrencyGuard:
         return False
 
     def list_active_slots(self) -> List[str]:
+        """Return the identifiers of currently active training slots from the slots file."""
         self._ensure_slots_file()
         try:
             with open(self.slots_file, "r", encoding="utf-8") as f:
@@ -496,6 +510,7 @@ class TrainingOrchestrator:
     """Manages the full end-to-end training, thermal checks, and quantization state machine."""
 
     def __init__(self, root_dir: Optional[Path] = None, mock_temp: Optional[float] = None):
+        """Create the thermal and concurrency guard and the orchestrator's state tracking."""
         self.root = Path(root_dir or ".").resolve()
         self.guard = ThermalAndConcurrencyGuard(self.root, mock_temp=mock_temp)
         self.state = OrchestratorState.IDLE
@@ -503,6 +518,7 @@ class TrainingOrchestrator:
         self.history: List[Dict[str, Any]] = []
 
     def _transition(self, new_state: OrchestratorState, detail: str = ""):
+        """Move the state machine to a new state and record the transition with optional detail."""
         record = {
             "from": self.state.value,
             "to": new_state.value,

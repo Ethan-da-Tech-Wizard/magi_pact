@@ -1,3 +1,7 @@
+# Program: magi_pact - test_final_pipeline.py
+# Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+# Last Modified: 2026-11-18
+# Purpose: End-to-end tests for the final dataset lock-in and the LoRA training pipeline (verification, trajectories, dedup, VRAM and thermal guards).
 """Comprehensive test suite for the Final Dataset Lock-in and LoRA Training Pipeline.
 
 Verifies:
@@ -28,7 +32,9 @@ from pact.training import (
 
 class TestFinalPipeline(unittest.TestCase):
 
+    """Test case group: FinalPipeline behaviour."""
     def test_toolchain_detection(self):
+        """Check: toolchain detection."""
         toolchains = detect_toolchains()
         self.assertIn("c", toolchains)
         self.assertIn("cpp", toolchains)
@@ -37,6 +43,7 @@ class TestFinalPipeline(unittest.TestCase):
         self.assertIn("csharp", toolchains)
 
     def test_c_sandbox_execution(self):
+        """Check: c sandbox execution."""
         runner = IsolatedSandboxRunner()
         c_code = (
             "#include <stdio.h>\n"
@@ -55,6 +62,7 @@ class TestFinalPipeline(unittest.TestCase):
             self.assertIn("C verification passed.", receipt.stdout)
 
     def test_cpp_sandbox_execution(self):
+        """Check: cpp sandbox execution."""
         runner = IsolatedSandboxRunner()
         cpp_code = (
             "#include <iostream>\n"
@@ -76,6 +84,7 @@ class TestFinalPipeline(unittest.TestCase):
             self.assertIn("CPP verification passed.", receipt.stdout)
 
     def test_systems_firmware_trajectories(self):
+        """Check: systems firmware trajectories."""
         self.assertGreaterEqual(len(SYSTEMS_CORPUS), 5)
         for traj in SYSTEMS_CORPUS:
             self.assertTrue(traj.trajectory_id.startswith("SYS-"))
@@ -96,6 +105,7 @@ class TestFinalPipeline(unittest.TestCase):
             self.assertTrue(out_path.exists())
 
     def test_web_runtime_specs(self):
+        """Check: web runtime specs."""
         self.assertGreaterEqual(len(WEB_SPECS), 4)
         for spec in WEB_SPECS:
             self.assertTrue(validate_web_spec(spec), f"Spec {spec.spec_id} failed validation")
@@ -109,6 +119,7 @@ class TestFinalPipeline(unittest.TestCase):
 
     def test_fleet_dedup_and_leak_gate(self):
         # 1. Test skeleton extraction
+        """Check: fleet dedup and leak gate."""
         p1 = "How to configure [task id #101] network on Arch Linux?"
         p2 = "How to configure [task id #999] network on Arch Linux?"
         self.assertEqual(FleetDedupEngine.extract_skeleton(p1), FleetDedupEngine.extract_skeleton(p2))
@@ -132,6 +143,7 @@ class TestFinalPipeline(unittest.TestCase):
 
     def test_lora_training_and_thermal_guard(self):
         # 1. RTX 3070 VRAM Budget Verification
+        """Check: lora training and thermal guard."""
         calc = VRAMBudgetGuard.calculate_memory_footprint(
             model_params_billion=7.6,
             rank=16,

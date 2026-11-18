@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# Program: magi_pact - prepare_lora_dataset_splits.py
+# Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+# Last Modified: 2026-11-18
+# Purpose: Formats the consolidated golden corpus into ChatML SFT/DPO rows, partitions them into train/dev/eval splits, and verifies the quality gates.
 """Magi Pact: LoRA SFT/DPO Dataset Formatter, Partitioner & Gate Verifier.
 
 Ingests:
@@ -30,6 +34,7 @@ import sys
 from typing import Dict, Any
 
 # Ensure workspace root is in sys.path
+# --- Paths: repo root is one level above scripts/ ---
 SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT_DIR = SCRIPT_DIR.parent
 if str(ROOT_DIR) not in sys.path:
@@ -42,6 +47,7 @@ from pact.splits import (
 
 
 def main():
+    """Entry point: format the golden corpus, partition it into splits, verify the gates, and write the dataset files."""
     parser = argparse.ArgumentParser(
         description="Format and partition golden master corpus into canonical LoRA dataset splits."
     )
@@ -71,8 +77,10 @@ def main():
     )
     args = parser.parse_args()
 
+    # The splitter does the formatting, partitioning and writing.
     splitter = DatasetSplitter(root_dir=ROOT_DIR)
 
+    # Verify-only mode: recompute each split's SHA256 and compare to the checksum file.
     if args.verify_only:
         checksum_file = args.out_dir / "CHECKSUMS.sha256"
         if not checksum_file.exists():
@@ -84,6 +92,7 @@ def main():
             for line in f:
                 line = line.strip()
                 if line:
+                    # Each checksum line is '<hash>  <filename>'.
                     exp_sha, fname = line.split(None, 1)
                     target_file = args.out_dir / fname
                     if not target_file.exists():
@@ -112,10 +121,12 @@ def main():
     print(f"Ingested {len(records)} records from {args.corpus.name}.")
 
     # Partition & Format
+    # Hold out dev/eval by task family so no prompt leaks across splits.
     res = splitter.partition_records(records, system_prompt=args.system_prompt)
     print("Partition and Qwen3.5 ChatML formatting complete.")
 
     # Write splits
+    # Writes the split files, manifest and checksum file.
     checksums = splitter.write_splits(res, output_dir=args.out_dir)
 
     print("\n" + "=" * 76)

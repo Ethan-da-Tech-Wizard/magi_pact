@@ -1,3 +1,8 @@
+# Program: magi_pact - dedup.py
+# Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+# Last Modified: 2026-11-18
+# Purpose: Normalized prompt deduplication, policy leak scanning and the multi-check training gate for datasets.
+
 """Normalized Prompt Deduplication, Policy Leak Scanner, and Training Gate Engine.
 
 Ensures cross-box multi-language and hardware compiled datasets have:
@@ -129,9 +134,11 @@ class PolicyLeakScanner:
     """Scans dataset records with zero-tolerance policy leak rules."""
     
     def __init__(self, private_hosts: Optional[Set[str]] = None):
+        """Store the set of private host names to flag, defaulting to the module-level list."""
         self.private_hosts = set(private_hosts or PRIVATE_HOSTS)
         
     def scan_text(self, text: str, field_name: str, is_chosen: bool = False) -> List[Dict[str, Any]]:
+        """Scan one text field for credentials, private identity, filesystem path and destructive-payload patterns and return a list of findings."""
         findings = []
         
         # 1. Check for real credentials
@@ -311,6 +318,7 @@ def deduplicate_dataset(
 
 @dataclass
 class TrainingGateResult:
+    """Outcome of the training gate: overall pass flag, per-check results and any violations found."""
     passed: bool
     status: str  # "PASSED" | "FAILED"
     gate_checks: Dict[str, bool]
@@ -319,6 +327,7 @@ class TrainingGateResult:
     timestamp: str
 
     def to_dict(self) -> Dict[str, Any]:
+        """Return the result as a plain dictionary."""
         return asdict(self)
 
 
@@ -333,6 +342,7 @@ class TrainingGate:
     ]
     
     def __init__(self, scanner: Optional[PolicyLeakScanner] = None):
+        """Use the supplied leak scanner, or build a default one."""
         self.scanner = scanner or PolicyLeakScanner()
         
     def evaluate(
@@ -341,6 +351,7 @@ class TrainingGate:
         manifest_checksum: Optional[str] = None,
         expected_checksum: Optional[str] = None,
     ) -> TrainingGateResult:
+        """Run every training-gate check (leaks, duplicate prompts and content, schema, domain coverage, manifest checksum) over the records and return a TrainingGateResult."""
         violations: List[str] = []
         checks: Dict[str, bool] = {
             "policy_leak_gate": True,
