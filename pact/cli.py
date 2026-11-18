@@ -1,11 +1,60 @@
+# ==============================================================================
+# Program: cli.py
+# Programmer: Ethan-da-Tech-Wizard
+# Course: CIS 156 / Advanced Systems
+# Last Modified: November 18, 2026
+# Purpose: Unified Command Line Interface (CLI) for the Magi Pact 32-Seat
+#          Federated Consensus Mesh. Provides intuitive terminal commands for
+#          humans and autonomous agents to initialize meshes, claim seats,
+#          exchange messages, acquire advisory locks, and manage dataset shards.
+# ==============================================================================
+
 """Command Line Interface for Magi Pact.
 
-Accessible to humans and coding agents directly.
-"""
-import argparse
-import sys
-from pathlib import Path
+================================================================================
+DISTRIBUTED SYSTEMS EDUCATIONAL OVERVIEW: THE CLI AS AN AGENT BUS
+================================================================================
+How Agents and Humans Interact With the Mesh:
+--------------------------------------------
+In an autonomous multi-agent cluster, agents running on distinct hosts or
+sub-shells must coordinate without manual human intervention. The Magi Pact CLI
+acts as an accessible, scriptable protocol client:
 
+1. Dynamic Workspace Discovery (`get_herder`):
+   Subcommands automatically traverse the filesystem upwards to locate the
+   nearest `roster/` or `pact/` directory, allowing agents to execute commands
+   from any subdirectory without manually specifying `--dir`.
+
+2. 32-Seat Visual Grid Representation:
+   The `status` command renders a visual 4x8 ANSI-colored terminal grid representing
+   all 32 seats:
+     - [00★] : Host / Primary Arbitrator (Yellow)
+     - [XX●] : Active Peer Node with valid lease (Green)
+     - [XX▲] : Stale Seat with expired lease > 300s (Red)
+     - [XX○] : Pristine Vacant Seat available for allocation
+
+3. Environment Variable Context Integration:
+   Commands like `post` inspect the `MAGI_SEAT` environment variable. When an
+   autonomous agent is assigned to Seat 04, setting `export MAGI_SEAT=4` allows
+   it to post and communicate without repetitively passing `--from-seat 4`.
+
+4. Subcommand Dispatch Pattern:
+   Rather than complex if-elif chains, the CLI utilizes Python's dictionary-based
+   command dispatch table (`dispatch_map`), mapping subcommand strings directly
+   to dedicated handler functions.
+"""
+
+# ------------------------------------------------------------------------------
+# Standard Library Imports
+# ------------------------------------------------------------------------------
+import argparse   # Standard Python command-line argument parsing library
+import os         # Operating system environment variable inspection
+import sys        # System-specific parameters, exits, and standard streams
+from pathlib import Path  # Object-oriented filesystem path manipulation
+
+# ------------------------------------------------------------------------------
+# Magi Pact Internal Module Imports
+# ------------------------------------------------------------------------------
 from .herder import PactHerder
 from .protocol import (
     KIND_CHAT,
@@ -14,28 +63,97 @@ from .protocol import (
     make_envelope,
 )
 from .abli import AbliteratedRegistry
-from .dataset import export_seat_shard, reconcile_mesh_shards, generate_language_matrix, DOMAINS
+from .dataset import (
+    export_seat_shard,
+    reconcile_mesh_shards,
+    generate_language_matrix,
+    DOMAINS,
+)
 
+
+# ==============================================================================
+# Workspace Discovery Helper
+# ==============================================================================
 
 def get_herder(dir_override: str = None) -> PactHerder:
+    """Discovers the workspace root and instantiates a configured PactHerder.
+
+    Educational Note on Directory Tree Traversal:
+    ---------------------------------------------
+    Command-line tools often fail when invoked from deep subdirectories (e.g.,
+    running `pact send` from inside `data/datasets/`). This function implements
+    an upwards directory crawl: it begins at the current working directory and
+    steps upwards through parent folders until it finds evidence of the workspace
+    boundary (`roster/` or `pact/` directories).
+
+    Inputs:
+        dir_override (Optional[str]): Explicit workspace directory passed by user via `--dir`.
+
+    Outputs:
+        PactHerder: Initialized Herder instance bound to the resolved workspace root.
+
+    Step-by-Step Logic:
+        1. If `dir_override` is provided, resolve it to an absolute Path and return `PactHerder(root)`.
+        2. Otherwise, start at `Path.cwd()` (the current working directory).
+        3. Climb parent directories in a while-loop until reaching the filesystem root (`/`).
+        4. If a directory containing `roster` or `pact` is detected, return `PactHerder(current)`.
+        5. If the search reaches the root without finding a match, fallback to `PactHerder(root)`.
+    """
+    # 1. Respect explicit directory override if supplied
     root = Path(dir_override).resolve() if dir_override else Path.cwd()
-    # Walk upwards if not in root of magi_pact
+
+    # 2. Traverse upwards through parent directories
     current = root
     while current != current.parent:
         if (current / "roster").is_dir() or (current / "pact").is_dir():
             return PactHerder(current)
         current = current.parent
+
+    # 3. Fallback to original root
     return PactHerder(root)
 
 
-def cmd_init(args):
+# ==============================================================================
+# Subcommand Handlers
+# ==============================================================================
+
+def cmd_init(args: argparse.Namespace) -> None:
+    """Initializes a fresh 32-seat Magi Pact workspace on disk.
+
+    Inputs:
+        args (argparse.Namespace): Parsed arguments containing `dir`, `host`, and `agent`.
+
+    Outputs:
+        None. (Prints success message to stdout).
+
+    Step-by-Step Logic:
+        1. Instantiate `PactHerder` pointing to the target directory.
+        2. Invoke `herder.initialize_workspace()` with host occupant and model name.
+        3. Print confirmation details to console.
+    """
     herder = PactHerder(Path(args.dir or ".").resolve())
     herder.initialize_workspace(host_occupant=args.host, host_agent=args.agent)
     print(f"✅ Magi Pact workspace initialized at: {herder.root}")
     print(f"   Host: {args.host} (Seat 00) | 32 total seats configured.")
 
 
-def cmd_status(args):
+def cmd_status(args: argparse.Namespace) -> None:
+    """Displays visual 32-seat grid, active members, file claims, and recent messages.
+
+    Inputs:
+        args (argparse.Namespace): Parsed CLI arguments.
+
+    Outputs:
+        None. (Renders dashboard to stdout).
+
+    Step-by-Step Logic:
+        1. Query `herder.list_seats()` (which automatically triggers stale reaping).
+        2. Query `herder.list_claims()` for active advisory locks.
+        3. Query `herder.get_messages(limit=5)` for recent message audit trail.
+        4. Render a formatted 4x8 grid representing the 32 seats with ANSI color badges.
+        5. List active and stale members with last heartbeat timestamps.
+        6. Display active file locks and recent board messages.
+    """
     herder = get_herder(args.dir)
     seats = herder.list_seats()
     active_claims = herder.list_claims()
@@ -45,7 +163,7 @@ def cmd_status(args):
     print(" 🏛️  MAGI PACT: 32-SEAT FEDERATED MESH STATUS")
     print("=" * 64)
 
-    # 32-Seat Visual Grid
+    # 32-Seat Visual Grid (4 rows x 8 columns)
     print("\n[ SEAT ROSTER ]")
     active_count = sum(1 for s in seats if s["status"] == SeatState.ACTIVE)
     print(f"Occupancy: {active_count}/32 seats active\n")
@@ -57,16 +175,17 @@ def cmd_status(args):
             s = seats[idx]
             status = s.get("status")
             if idx == 0:
-                badge = f"[\033[93m00★\033[0m]" # Host
+                badge = f"[\033[93m00★\033[0m]"  # Seat 00: Host (Yellow Star)
             elif status == SeatState.ACTIVE:
-                badge = f"[\033[92m{idx:02d}●\033[0m]" # Active
+                badge = f"[\033[92m{idx:02d}●\033[0m]"  # Active (Green Circle)
             elif status == SeatState.STALE:
-                badge = f"[\033[91m{idx:02d}▲\033[0m]" # Stale
+                badge = f"[\033[91m{idx:02d}▲\033[0m]"  # Stale (Red Triangle)
             else:
-                badge = f"[{idx:02d}○]"             # Vacant
+                badge = f"[{idx:02d}○]"              # Vacant (Normal Circle)
             row_str += badge + " "
         print(row_str)
 
+    # Active Member Roster Details
     print("\nActive Members:")
     for s in seats:
         if s.get("status") in (SeatState.ACTIVE, SeatState.STALE):
@@ -74,7 +193,7 @@ def cmd_status(args):
             st_color = "\033[92mACTIVE\033[0m" if s["status"] == SeatState.ACTIVE else "\033[91mSTALE\033[0m"
             print(f"  • Seat {s['seat_id']:02d} [{role_badge}]: {s.get('occupant', 'anon')} ({s.get('agent_model', 'agent')}) - {st_color} (Heartbeat: {s.get('last_heartbeat')})")
 
-    # Active Claims
+    # Active Claims (Advisory File Locks)
     print("\n[ ACTIVE FILE CLAIMS (LOCKS) ]")
     if not active_claims:
         print("  None. All files unlocked.")
@@ -82,7 +201,7 @@ def cmd_status(args):
         for path, info in active_claims.items():
             print(f"  🔒 {path} -> Seat {info['seat_id']:02d} (Intent: {info['intent']})")
 
-    # Recent Messages
+    # Recent Audit Log Messages
     print("\n[ RECENT MESSAGES ]")
     if not recent_msgs:
         print("  No messages yet.")
@@ -93,7 +212,20 @@ def cmd_status(args):
     print("=" * 64 + "\n")
 
 
-def cmd_take_seat(args):
+def cmd_take_seat(args: argparse.Namespace) -> None:
+    """Claims a specific or automatically selected open seat for an agent.
+
+    Inputs:
+        args (argparse.Namespace): Arguments containing `name`, `model`, `seat`, `capabilities`.
+
+    Outputs:
+        None. (Prints confirmation to stdout).
+
+    Step-by-Step Logic:
+        1. Parse seat target: if numeric, use integer; if 'auto', leave as None.
+        2. Call `herder.claim_seat()` with occupant, model, and capabilities.
+        3. Print successful seat allocation details.
+    """
     herder = get_herder(args.dir)
     target_seat = None
     if getattr(args, "seat", None) is not None:
@@ -114,7 +246,20 @@ def cmd_take_seat(args):
     print(f"🎉 Successfully claimed Seat {res['seat_id']:02d} for {res['occupant']} ({res['agent_model']})!")
 
 
-def cmd_who(args):
+def cmd_who(args: argparse.Namespace) -> None:
+    """Prints a concise, tabular summary of active members currently in the mesh.
+
+    Inputs:
+        args (argparse.Namespace): Parsed CLI arguments.
+
+    Outputs:
+        None. (Prints active roster to stdout).
+
+    Step-by-Step Logic:
+        1. Retrieve seats via `herder.list_seats()`.
+        2. Filter for seats that are ACTIVE or STALE.
+        3. Print details for each occupied seat.
+    """
     herder = get_herder(args.dir)
     seats = herder.list_seats()
     active = [s for s in seats if s.get("status") in (SeatState.ACTIVE, SeatState.STALE)]
@@ -131,23 +276,67 @@ def cmd_who(args):
     print("=" * 64 + "\n")
 
 
-def cmd_leave_seat(args):
+def cmd_leave_seat(args: argparse.Namespace) -> None:
+    """Vacates a seat gracefully and resets its status to VACANT.
+
+    Inputs:
+        args (argparse.Namespace): Arguments containing `seat` and optional `reason`.
+
+    Outputs:
+        None.
+
+    Step-by-Step Logic:
+        1. Obtain herder instance.
+        2. Invoke `herder.release_seat(args.seat, reason)`.
+        3. Print confirmation message.
+    """
     herder = get_herder(args.dir)
     herder.release_seat(args.seat, reason=args.reason or "voluntary exit")
     print(f"👋 Seat {args.seat:02d} released and marked vacant.")
 
 
-def cmd_heartbeat(args):
+def cmd_heartbeat(args: argparse.Namespace) -> None:
+    """Emits a keep-alive heartbeat pulse to renew an active seat's lease.
+
+    Inputs:
+        args (argparse.Namespace): Arguments containing `seat`.
+
+    Outputs:
+        None.
+
+    Step-by-Step Logic:
+        1. Call `herder.heartbeat(args.seat)` to refresh the UTC timestamp on disk.
+        2. Print confirmation message.
+    """
     herder = get_herder(args.dir)
     herder.heartbeat(args.seat)
     print(f"💓 Heartbeat recorded for Seat {args.seat:02d}.")
 
 
-def cmd_post(args):
+def cmd_post(args: argparse.Namespace) -> None:
+    """Posts a message to the mesh (broadcast to all or direct to a specific seat).
+
+    Educational Note on Environment Variable Integration:
+    -----------------------------------------------------
+    If `--from-seat` is omitted, the CLI checks `os.environ.get("MAGI_SEAT")`.
+    This allows an agent daemon to set `MAGI_SEAT` in its sub-shell environment
+    and post messages without hardcoding its seat ID into every command string.
+
+    Inputs:
+        args (argparse.Namespace): Arguments containing `from_seat`, `to`, `msg`.
+
+    Outputs:
+        None.
+
+    Step-by-Step Logic:
+        1. Determine sender seat: use `args.from_seat` if given, else check `MAGI_SEAT`, else default to 0.
+        2. Create message envelope using `make_envelope(kind=KIND_CHAT, ...)`.
+        3. Append envelope to board log via `herder.record_message(env)`.
+        4. Print delivery confirmation and message ID.
+    """
     herder = get_herder(args.dir)
     from_seat = getattr(args, "from_seat", None)
     if from_seat is None:
-        import os
         try:
             from_seat = int(os.environ.get("MAGI_SEAT", 0))
         except (ValueError, TypeError):
@@ -162,7 +351,20 @@ def cmd_post(args):
     print(f"📨 Message recorded (ID: {env['msg_id']}) to {'ALL' if args.to is None else f'Seat {args.to:02d}'}")
 
 
-def cmd_dispatch(args):
+def cmd_dispatch(args: argparse.Namespace) -> None:
+    """Dispatches a formal structured task from Host Seat 00 to a peer agent.
+
+    Inputs:
+        args (argparse.Namespace): Arguments containing `from_seat`, `to`, `title`, `body`.
+
+    Outputs:
+        None.
+
+    Step-by-Step Logic:
+        1. Construct envelope with `KIND_TASK_DISPATCH`.
+        2. Route message to the destination inbox and board log via `herder.record_message()`.
+        3. Print confirmation of task dispatch.
+    """
     herder = get_herder(args.dir)
     env = make_envelope(
         kind=KIND_TASK_DISPATCH,
@@ -174,7 +376,19 @@ def cmd_dispatch(args):
     print(f"🚀 Task dispatched to Seat {args.to:02d}: '{args.title}'")
 
 
-def cmd_inbox(args):
+def cmd_inbox(args: argparse.Namespace) -> None:
+    """Inspects and displays direct messages delivered to an agent's individual inbox.
+
+    Inputs:
+        args (argparse.Namespace): Arguments containing `seat`.
+
+    Outputs:
+        None. (Prints inbox contents to stdout).
+
+    Step-by-Step Logic:
+        1. Call `herder.poll_inbox(args.seat)`.
+        2. Format and display each received message timestamp, sender, and payload.
+    """
     herder = get_herder(args.dir)
     items = herder.poll_inbox(args.seat)
     print(f"\n📬 Inbox for Seat {args.seat:02d} ({len(items)} messages):\n")
@@ -185,7 +399,20 @@ def cmd_inbox(args):
     print()
 
 
-def cmd_claim(args):
+def cmd_claim(args: argparse.Namespace) -> None:
+    """Acquires an exclusive advisory file lock on a path before modification.
+
+    Inputs:
+        args (argparse.Namespace): Arguments containing `seat`, `path`, `intent`.
+
+    Outputs:
+        None. (Exits with code 1 if lock acquisition fails).
+
+    Step-by-Step Logic:
+        1. Call `herder.acquire_claim(seat_id, path, intent)`.
+        2. If successful, print confirmation.
+        3. If unsuccessful (already locked), print error and exit with code 1.
+    """
     herder = get_herder(args.dir)
     ok = herder.acquire_claim(seat_id=args.seat, resource_path=args.path, intent=args.intent)
     if ok:
@@ -195,7 +422,20 @@ def cmd_claim(args):
         sys.exit(1)
 
 
-def cmd_release(args):
+def cmd_release(args: argparse.Namespace) -> None:
+    """Releases an advisory file lock previously acquired by this seat.
+
+    Inputs:
+        args (argparse.Namespace): Arguments containing `seat` and `path`.
+
+    Outputs:
+        None. (Exits with code 1 if release is unauthorized or path not locked).
+
+    Step-by-Step Logic:
+        1. Call `herder.release_claim(seat_id, path)`.
+        2. If successful, print confirmation.
+        3. If caller does not own the lock, print error and exit with code 1.
+    """
     herder = get_herder(args.dir)
     ok = herder.release_claim(seat_id=args.seat, resource_path=args.path)
     if ok:
@@ -205,7 +445,20 @@ def cmd_release(args):
         sys.exit(1)
 
 
-def cmd_abli(args):
+def cmd_abli(args: argparse.Namespace) -> None:
+    """Manages abliterated model profiles and hardware-aware routing.
+
+    Inputs:
+        args (argparse.Namespace): Arguments containing `--set` or `--list`.
+
+    Outputs:
+        None. (Prints hardware profile data to stdout).
+
+    Step-by-Step Logic:
+        1. Instantiate `AbliteratedRegistry(herder.root)`.
+        2. If `--set <profile_id>` is supplied, activate profile and return.
+        3. Otherwise, detect host hardware (Apple Silicon vs Linux CUDA) and display profiles.
+    """
     herder = get_herder(args.dir)
     reg = AbliteratedRegistry(herder.root)
     if args.set:
@@ -235,7 +488,20 @@ def cmd_abli(args):
         print(f"    Corpus ID : {p['training_corpus_id']}")
 
 
-def cmd_dataset(args):
+def cmd_dataset(args: argparse.Namespace) -> None:
+    """Manages multi-language golden dataset sharding and peer reconciliation.
+
+    Inputs:
+        args (argparse.Namespace): Arguments containing `--export-seat`, `--reconcile`, or `--status`.
+
+    Outputs:
+        None. (Exports shards or reconciles peer data).
+
+    Step-by-Step Logic:
+        1. If `--export-seat <id>` is provided, export collision-free shard into `exchange/`.
+        2. If `--reconcile` is provided, deduplicate and merge all peer shards without overwrites.
+        3. Otherwise, summarize language matrix domain coverage.
+    """
     herder = get_herder(args.dir)
     if args.export_seat is not None:
         p = export_seat_shard(args.export_seat, herder.root)
@@ -259,8 +525,31 @@ def cmd_dataset(args):
         print(f"  • {d.ljust(20)}: {count} gold verified exemplar(s)")
 
 
-def main():
-    parser = argparse.ArgumentParser(prog="magi_pact", description="Magi Pact: 32-Seat Multi-Agent Federated Mesh")
+# ==============================================================================
+# Main Parser Setup and Command Dispatch
+# ==============================================================================
+
+def main() -> None:
+    """Primary entrypoint for the CLI argument parser and command router.
+
+    Inputs:
+        None. (Parses arguments from sys.argv).
+
+    Outputs:
+        None.
+
+    Step-by-Step Logic:
+        1. Configure top-level argument parser with `--dir` option.
+        2. Register all subcommands: init, status, who, take-seat/join, leave-seat/leave,
+           heartbeat, post/send, dispatch, inbox, claim, release, abli, dataset.
+        3. Parse command-line arguments.
+        4. If no subcommand is supplied, display help text and exit cleanly.
+        5. Look up matching subcommand handler in `dispatch_map` and execute it.
+    """
+    parser = argparse.ArgumentParser(
+        prog="magi_pact",
+        description="Magi Pact: 32-Seat Multi-Agent Federated Consensus Mesh"
+    )
     parser.add_argument("--dir", help="Path to magi_pact root directory", default=None)
     sub = parser.add_subparsers(dest="command")
 
@@ -350,6 +639,7 @@ def main():
         parser.print_help()
         sys.exit(0)
 
+    # Command dispatch dictionary mapping subcommand strings to handler functions
     dispatch_map = {
         "init": cmd_init,
         "status": cmd_status,

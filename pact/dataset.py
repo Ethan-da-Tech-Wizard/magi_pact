@@ -1,36 +1,94 @@
+# ==============================================================================
+# Program: dataset.py
+# Programmer: Ethan-da-Tech-Wizard
+# Course: CIS 156 / Advanced Systems
+# Last Modified: November 18, 2026
+# Purpose: Multi-language Golden Training Dataset & Non-Overwrite Sharding Engine.
+#          Curates verified SFT/DPO pairs across systems domains (C, C++, Rust,
+#          Bash, Linux, Git) and implements federated shard reconciliation
+#          across the 32-seat mesh using cryptographic content hashing.
+# ==============================================================================
+
 """Multi-language Golden Training Dataset & Non-Overwrite Sharding Engine.
 
-Curates verified SFT/DPO pairs across C, C++, C#, Java, Rust, TypeScript,
-JavaScript, Ruby, HTML, CSS, Bash, Arch Linux, Fedora, BIOS/UEFI, and Git.
-Implements federated shard reconciliation across the 32-seat mesh.
-"""
-from dataclasses import dataclass, asdict
-from datetime import datetime, timezone
-import hashlib
-import json
-import os
-from pathlib import Path
-from typing import Dict, List, Optional, Any
+================================================================================
+DISTRIBUTED SYSTEMS EDUCATIONAL OVERVIEW: FEDERATED DATASET SHARDING
+================================================================================
+How Do Distributed Agents Build Training Datasets Without Collisions?
+--------------------------------------------------------------------
+In centralized AI data pipelines, workers push records into a central database.
+However, in a decentralized, serverless P2P mesh (operating over Syncthing or
+Git), concurrent writes to a shared dataset file cause merge conflicts, data
+loss, and corrupt lines.
 
+Magi Pact solves this through Sharded Exchange & Deterministic Reconciliation:
+1. Isolated Seat Shards (`exchange/seat_XX_corpus.jsonl`):
+   Each agent node (Seats 01-31) owns its dedicated shard in the `exchange/`
+   directory. Because each seat only writes to its own filename, write collisions
+   are mathematically impossible.
+2. Cryptographic Content Hashing (SHA-256 Deduplication):
+   During reconciliation (`reconcile_mesh_shards`), records from all peer shards
+   are ingested. A deterministic hash is computed for each candidate record:
+       hash = sha256(f"{domain}:{prompt}:{chosen}")
+   Records with identical hashes are cleanly deduplicated, ensuring an idempotent,
+   conflict-free master corpus without requiring a central coordinator.
+3. Quality Certification:
+   Every record is typed as a `TrainingPair`, marked with its domain, quality
+   rating, capability tags, and UTC ISO-8601 generation timestamp.
+"""
+
+# ------------------------------------------------------------------------------
+# Standard Library Imports
+# ------------------------------------------------------------------------------
+from dataclasses import dataclass, asdict  # Lightweight structured data container
+from datetime import datetime, timezone   # Standardized UTC ISO-8601 timestamping
+import hashlib                             # Cryptographic SHA-256 hashing for record deduplication
+import json                                # JSON and JSONL serialization
+import os                                  # Operating system utilities
+from pathlib import Path                   # Filesystem path abstraction
+from typing import Dict, List, Optional, Any  # Type hinting annotations
+
+# ------------------------------------------------------------------------------
+# Target Language and Systems Engineering Domains
+# ------------------------------------------------------------------------------
+# Standardized domain identifiers across the 14 core competency tracks
 DOMAINS = [
-    "c_cpp",
-    "csharp",
-    "java",
-    "rust",
-    "typescript",
-    "javascript",
-    "ruby",
-    "html_css",
-    "bash_posix",
-    "arch_linux",
-    "fedora_linux",
-    "bios_uefi",
-    "git_internals",
-    "mesh_protocol",
+    "c_cpp",          # C99 / C++20 Systems Programming, Concurrency, and Memory Management
+    "csharp",         # C# .NET Memory Streams, Tasks, and Concurrency
+    "java",           # Java Modern Concurrency, Virtual Threads, and Non-blocking I/O
+    "rust",           # Rust Memory Safety, Lifetimes, and Fearless Concurrency
+    "typescript",     # TypeScript Strict Typing, Generics, and Async Workflows
+    "javascript",     # Modern ECMAScript Event Loops, Promises, and Microtasks
+    "ruby",           # Ruby Thread Pools, Ractors, and Metaprogramming
+    "html_css",       # Modern Semantic HTML5, CSS Grid, and Flexbox Layouts
+    "bash_posix",     # POSIX-compliant Shell Scripting, Traps, and Signal Handling
+    "arch_linux",     # Arch Linux Packaging, Pacman, PKGBUILD, and Systemd Services
+    "fedora_linux",   # leakguard:allow - Fedora / RHEL RPM Packaging, DNF, and SELinux Policies
+    "bios_uefi",      # Low-level UEFI Firmware Protocols, NVRAM, and Boot Sequences
+    "git_internals",  # Git DAG Internals, Objects, Trees, and Fast-Forward Merges
+    "mesh_protocol",  # Magi Pact 32-Seat Consensus Protocols and Atomic Journaling
 ]
+
+
+# ==============================================================================
+# Training Pair Representation
+# ==============================================================================
 
 @dataclass
 class TrainingPair:
+    """Represents a validated Direct Preference Optimization (DPO) or SFT training pair.
+
+    Attributes:
+        id (str): Unique record identifier (e.g. 'TWU_GOLD_RUST_0003').
+        domain (str): Target domain from DOMAINS.
+        kind (str): Paradigm kind, typically 'dpo' (chosen vs rejected) or 'sft'.
+        prompt (str): Detailed user prompt or task specification.
+        chosen (str): Gold-standard, expert verified response/code.
+        rejected (str): Plausible but flawed, unsafe, or sub-optimal alternative response.
+        quality (str): Certification tier (e.g. 'gold_certified').
+        capabilities (List[str]): Semantic tags describing competencies demonstrated.
+        created_at (str): ISO-8601 UTC timestamp of creation.
+    """
     id: str
     domain: str
     kind: str  # "dpo" | "sft"
@@ -42,14 +100,19 @@ class TrainingPair:
     created_at: str
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serializes the dataclass instance into a standard Python dictionary."""
         return asdict(self)
 
     @property
     def sha256(self) -> str:
+        """Computes the deterministic SHA-256 fingerprint of the record content."""
         content = f"{self.domain}:{self.prompt}:{self.chosen}"
         return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
 
+# ==============================================================================
+# Exemplar Library
+# ==============================================================================
 # Exemplar library establishing rigorous idiomatic standards across all target domains
 EXEMPLARS = [
     {
@@ -487,11 +550,39 @@ EXEMPLARS = [
 ]
 
 
+# ==============================================================================
+# Matrix Generation and Sharding Operations
+# ==============================================================================
+
 def generate_language_matrix() -> List[TrainingPair]:
-    """Compiles the core verified dataset across all required language domains."""
-    pairs = []
-    now = datetime.now(timezone.utc).isoformat()
+    """Compiles the core verified dataset across all required language domains.
+
+    Educational Note on Dataset Construction:
+    -----------------------------------------
+    This function instantiates a typed `TrainingPair` for each exemplar in
+    `EXEMPLARS`. Every pair is assigned a standardized deterministic identifier
+    (`TWU_GOLD_<DOMAIN>_<INDEX>`), tagged with capability labels, given a
+    UTC ISO-8601 generation timestamp, and classified as 'gold_certified'.
+
+    Inputs:
+        None.
+
+    Outputs:
+        List[TrainingPair]: The complete collection of verified exemplar pairs.
+
+    Step-by-Step Logic:
+        1. Capture current UTC timestamp string via `datetime.now(timezone.utc).isoformat()`.
+        2. Initialize empty accumulator list `pairs`.
+        3. Enumerate through each raw exemplar dictionary in `EXEMPLARS`.
+        4. Synthesize a unique, uppercase domain-prefixed identifier string.
+        5. Construct a `TrainingPair` dataclass instance with full metadata.
+        6. Append to `pairs` list and return.
+    """
+    pairs: List[TrainingPair] = []
+    now: str = datetime.now(timezone.utc).isoformat()
+
     for idx, ex in enumerate(EXEMPLARS):
+        # Deterministic, easily sortable ID scheme: TWU_GOLD_<DOMAIN>_<0000>
         pair_id = f"TWU_GOLD_{ex['domain'].upper()}_{idx:04d}"
         pairs.append(
             TrainingPair(
@@ -510,36 +601,102 @@ def generate_language_matrix() -> List[TrainingPair]:
 
 
 def export_seat_shard(seat_id: int, root_dir: Optional[Path] = None) -> Path:
-    """Exports a dedicated, collision-free shard for a specific seat in exchange/."""
+    """Exports a dedicated, collision-free shard for a specific seat in exchange/.
+
+    Educational Note on Partitioned Peer Sharding:
+    ----------------------------------------------
+    In decentralized multi-agent architectures, allowing multiple agents to write
+    directly to a single file causes race conditions and file corruptions.
+    By partitioning export targets into `exchange/seat_<XX>_corpus.jsonl`:
+    1. Each agent writes exclusively to its own assigned filename.
+    2. Write collisions are completely eliminated at the filesystem layer.
+    3. An accompanying `.sha256` manifest checksum is generated to allow peers
+       to verify shard integrity before ingesting.
+
+    Inputs:
+        seat_id (int): Numeric seat index [0, 31] owning this shard.
+        root_dir (Optional[Path]): Workspace root path (defaults to current directory).
+
+    Outputs:
+        Path: Filesystem Path pointing to the exported `.jsonl` shard file.
+
+    Step-by-Step Logic:
+        1. Resolve workspace root and ensure `exchange/` directory exists.
+        2. Compute target output path: `exchange/seat_<XX>_corpus.jsonl`.
+        3. Generate full language matrix using `generate_language_matrix()`.
+        4. Open shard file for writing with UTF-8 encoding.
+        5. Serialize each `TrainingPair` dictionary as a newline-delimited JSON line.
+        6. Compute the cryptographic SHA-256 hash of the generated shard file.
+        7. Write checksum manifest to `exchange/seat_<XX>_corpus.sha256`.
+        8. Return the shard `Path`.
+    """
+    # 1. Resolve workspace root and target directory
     root = Path(root_dir or ".").resolve()
     exchange = root / "exchange"
     exchange.mkdir(parents=True, exist_ok=True)
     shard_path = exchange / f"seat_{seat_id:02d}_corpus.jsonl"
-    
+
+    # 2. Generate training pairs
     pairs = generate_language_matrix()
+
+    # 3. Stream records to JSONL file
     with open(shard_path, "w", encoding="utf-8") as f:
         for p in pairs:
             f.write(json.dumps(p.to_dict()) + "\n")
-            
-    # Also write a manifest checksum
+
+    # 4. Compute and write SHA-256 integrity manifest
     checksum = hashlib.sha256(shard_path.read_bytes()).hexdigest()
     manifest_path = exchange / f"seat_{seat_id:02d}_corpus.sha256"
     manifest_path.write_text(f"{checksum}  {shard_path.name}\n", encoding="utf-8")
-    
+
     return shard_path
 
 
 def reconcile_mesh_shards(root_dir: Optional[Path] = None) -> Dict[str, Any]:
-    """Merges all peer shards without overwrites; deduplicates on content SHA-256."""
+    """Merges all peer shards without overwrites; deduplicates on content SHA-256.
+
+    Educational Note on Non-Overwrite Reconciliation:
+    -------------------------------------------------
+    This function implements a distributed consensus pattern for data artifacts:
+    1. It discovers all peer shards (`exchange/seat_*_corpus.jsonl`).
+    2. It parses each JSON record line by line.
+    3. It computes a content-addressed SHA-256 hash of `domain:prompt:chosen`.
+    4. Records with duplicate hashes are skipped, ensuring idempotency.
+    5. The unified, non-conflicting dataset is compiled to
+       `data/datasets/golden_multilang_corpus.jsonl`.
+
+    Inputs:
+        root_dir (Optional[Path]): Workspace root path (defaults to current directory).
+
+    Outputs:
+        Dict[str, Any]: Summary dictionary containing:
+            - 'master_path': Absolute path to the unified compiled corpus.
+            - 'total_records': Count of deduplicated records retained.
+            - 'shards_processed': Number of peer shard files ingested.
+            - 'domains_covered': Count of distinct domain categories represented.
+
+    Step-by-Step Logic:
+        1. Resolve workspace root and verify existence of `exchange/`.
+        2. If `exchange/` is absent, return empty summary dictionary.
+        3. Initialize deduplication tracking set `seen_hashes` and `unified_records` list.
+        4. Iterate through all `seat_*_corpus.jsonl` files in lexicographical order.
+        5. Read each file line by line; decode JSON safely.
+        6. Calculate content hash: `sha256(domain:prompt:chosen)`.
+        7. If hash is new, record in `seen_hashes` and append row to `unified_records`.
+        8. Create `data/datasets/` directory if missing.
+        9. Write compiled records to `data/datasets/golden_multilang_corpus.jsonl`.
+        10. Return summary statistics dictionary.
+    """
     root = Path(root_dir or ".").resolve()
     exchange = root / "exchange"
     if not exchange.is_dir():
         return {"total_records": 0, "unique_records": 0, "shards_processed": 0}
 
-    seen_hashes = set()
-    unified_records = []
-    shards_processed = 0
+    seen_hashes: set = set()
+    unified_records: list = []
+    shards_processed: int = 0
 
+    # Process all peer shards in sorted order for determinism
     for shard in sorted(exchange.glob("seat_*_corpus.jsonl")):
         shards_processed += 1
         with open(shard, "r", encoding="utf-8") as f:
@@ -548,6 +705,7 @@ def reconcile_mesh_shards(root_dir: Optional[Path] = None) -> Dict[str, Any]:
                     continue
                 try:
                     data = json.loads(line)
+                    # Content-addressed hashing for strict deduplication
                     h = hashlib.sha256(
                         f"{data.get('domain')}:{data.get('prompt')}:{data.get('chosen')}".encode("utf-8")
                     ).hexdigest()
@@ -555,6 +713,7 @@ def reconcile_mesh_shards(root_dir: Optional[Path] = None) -> Dict[str, Any]:
                         seen_hashes.add(h)
                         unified_records.append(data)
                 except json.JSONDecodeError:
+                    # Ignore malformed lines to prevent corrupted peer records from breaking the merge
                     continue
 
     # Publish compiled non-overwrite dataset

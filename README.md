@@ -232,6 +232,18 @@ python3 -m unittest discover tests
 
 ---
 
+## Author & Related Open Source Projects
+
+**Magi Pact** is architected and maintained by **[Ethan-da-Tech-Wizard](https://github.com/Ethan-da-Tech-Wizard)**.
+
+Explore other open-source projects, tools, and research from the author:
+- **[Ethan-da-Tech-Wizard on GitHub](https://github.com/Ethan-da-Tech-Wizard)** — Profile, open-source repositories, and autonomous agent toolchains.
+- **[ashr](https://github.com/Ethan-da-Tech-Wizard/ashr)** — High-performance shell runtime environment and system automation utilities.
+- **[lantern](https://github.com/Ethan-da-Tech-Wizard/lantern-public)** — Distributed telemetry, observability, and mesh visualization tooling.
+- **[TWU Systems & Agent Ecosystem](https://github.com/Ethan-da-Tech-Wizard)** — Sovereign multi-agent reasoning, abliterated model fine-tuning, and polyglot systems engineering pipelines.
+
+---
+
 ## License
 
 Magi Pact is dual-licensed under both the **MIT License** and the **Apache License (Version 2.0)**. See [LICENSE](LICENSE), [LICENSE-MIT](LICENSE-MIT), and [LICENSE-APACHE](LICENSE-APACHE) for details.
