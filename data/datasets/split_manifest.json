@@ -1,0 +1,122 @@
+{
+  "source_corpus": "exchange/consolidated/golden_master_corpus.jsonl",
+  "source_sha256": "546cbee696142c5ec44385a86115c1b99a9e4bd61571de7c47eb23454d5e63f8",
+  "source_total_rows": 124,
+  "chat_template": "qwen3.5_chatml",
+  "assistant_only_loss_masking": true,
+  "created_at": "2026-11-18T14:44:13.107176+00:00",
+  "splits": {
+    "sft_train": {
+      "path": "data/datasets/sft_train.jsonl",
+      "row_count": 24,
+      "kinds": {
+        "sft": 24
+      },
+      "domains": {
+        "c": 4,
+        "cpp": 4,
+        "csharp": 4,
+        "go": 4,
+        "java": 4,
+        "rust": 4
+      },
+      "sha256": "6061aaf7d3e396d9fad389d1376f19eaf210d857eed9ab448b5fa0e05d2c1667"
+    },
+    "dpo_train": {
+      "path": "data/datasets/dpo_train.jsonl",
+      "row_count": 68,
+      "kinds": {
+        "dpo": 68
+      },
+      "domains": {
+        "arch_linux": 6,
+        "bash_posix": 6,
+        "bios_uefi": 6,
+        "c": 5,
+        "cpp": 5,
+        "csharp": 5,
+        "fedora_linux": 6,
+        "git_internals": 6,
+        "go": 5,
+        "html_css": 5,
+        "java": 5,
+        "rust": 5,
+        "typescript": 3
+      },
+      "sha256": "73ff639d1ce0d2c14dbbcd8114c38a5b6d0bcf5ebf55eb60aac6d62e87cf88c8"
+    },
+    "dev": {
+      "path": "data/datasets/dev.jsonl",
+      "row_count": 19,
+      "dev_ratio": 0.1532,
+      "kinds": {
+        "dpo": 13,
+        "sft": 6
+      },
+      "domains": {
+        "arch_linux": 1,
+        "bash_posix": 1,
+        "bios_uefi": 1,
+        "c": 2,
+        "cpp": 2,
+        "csharp": 2,
+        "fedora_linux": 1,
+        "git_internals": 1,
+        "go": 2,
+        "html_css": 1,
+        "java": 2,
+        "rust": 2,
+        "typescript": 1
+      },
+      "sha256": "dbda23bc720d18462f7f8951fff3e3ca4f219dad9de4665c97338d89e43418c5"
+    },
+    "eval_heldout": {
+      "path": "data/datasets/eval_heldout.jsonl",
+      "row_count": 13,
+      "multi_turn": true,
+      "kinds": {
+        "dpo": 7,
+        "sft": 6
+      },
+      "domains": {
+        "arch_linux": 1,
+        "bash_posix": 1,
+        "bios_uefi": 1,
+        "c": 1,
+        "cpp": 1,
+        "csharp": 1,
+        "fedora_linux": 1,
+        "git_internals": 1,
+        "go": 1,
+        "html_css": 1,
+        "java": 1,
+        "rust": 1,
+        "typescript": 1
+      },
+      "sha256": "6b0926a07569f2dea3e4960570b0c7c6a495a834df2b7132b412d907e6bbb75b"
+    }
+  },
+  "total_split_rows": 124,
+  "cross_split_contamination": {
+    "train_dev_exact_prompt_overlap": 0,
+    "train_eval_exact_prompt_overlap": 0,
+    "dev_eval_exact_prompt_overlap": 0,
+    "contamination_free": true
+  },
+  "task_families_covered": [
+    "arch_linux",
+    "bash_posix",
+    "bios_uefi",
+    "c",
+    "cpp",
+    "csharp",
+    "fedora_linux",
+    "git_internals",
+    "go",
+    "html_css",
+    "java",
+    "rust",
+    "typescript"
+  ],
+  "task_families_count": 13
+}

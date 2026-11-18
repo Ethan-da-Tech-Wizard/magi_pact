@@ -106,6 +106,17 @@ class TestPactHerder(unittest.TestCase):
         # Poll empty inbox for Seat 3
         self.assertEqual(len(self.herder.poll_inbox(3)), 0)
 
+    def test_stale_seat_reaping_utc(self):
+        # Claim seat 1 with older heartbeat
+        claimed = self.herder.claim_seat(occupant="Bob", agent_model="Codex", seat_id=1)
+        self.assertEqual(claimed["status"], SeatState.ACTIVE)
+
+        # Reaping with short TTL should mark it stale if timestamp is in past
+        reaped = self.herder.reap_stale_seats(ttl_seconds=-1)
+        self.assertIn(1, reaped)
+        s1 = self.herder.get_seat(1)
+        self.assertEqual(s1["status"], SeatState.STALE)
+
 
 if __name__ == "__main__":
     unittest.main()

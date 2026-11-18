@@ -1,0 +1,33 @@
+{
+  "recipe_id": "lora-sft-rtx3070-v1",
+  "base_model": "abliterated://qwen-coder-32b-abli-mac",
+  "is_abliterated": true,
+  "target_modules": [
+    "q_proj",
+    "k_proj",
+    "v_proj",
+    "o_proj",
+    "gate_proj",
+    "up_proj",
+    "down_proj"
+  ],
+  "rank": 16,
+  "alpha": 32,
+  "learning_rate": 0.00015,
+  "lr_scheduler": "cosine",
+  "warmup_ratio": 0.03,
+  "weight_decay": 0.01,
+  "micro_batch_size": 1,
+  "gradient_accumulation_steps": 16,
+  "optimizer": "paged_adamw_8bit",
+  "gradient_checkpointing": true,
+  "max_seq_length": 2048,
+  "lora_dropout": 0.05,
+  "load_in_4bit": true,
+  "quant_type": "nf4",
+  "use_double_quant": true,
+  "torch_dtype": "bfloat16",
+  "dataset_path": "data/datasets/golden_multilang_corpus.jsonl",
+  "output_dir": "exchange/adapters/sft",
+  "epochs": 3
+}

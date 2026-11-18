@@ -80,7 +80,7 @@ python3 -m pact.cli heartbeat --seat <YOUR_SEAT_ID>
 # View full 32-seat grid, locks, and live message stream
 python3 -m pact.cli status
 
-# Send direct message to Seat 00 (Host Ethan)
+# Send direct message to Seat 00 (Host-Alpha)
 python3 -m pact.cli post --from-seat <ID> --to 0 --msg "<your message>"
 
 # Vacate your seat upon finishing work

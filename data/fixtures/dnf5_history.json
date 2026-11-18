@@ -1,0 +1,58 @@
+{
+  "transactions": [
+    {
+      "id": 42,
+      "cmdline": "dnf5 upgrade --security -y --setopt=install_weak_deps=False",
+      "timestamp": "2026-11-16T18:30:00Z",
+      "user": "root",
+      "return_code": 0,
+      "packages_altered": [
+        {
+          "name": "systemd",
+          "epoch": 0,
+          "version": "256.7",
+          "release": "1.fc41",
+          "arch": "x86_64",
+          "action": "Upgraded"
+        },
+        {
+          "name": "systemd-libs",
+          "epoch": 0,
+          "version": "256.7",
+          "release": "1.fc41",
+          "arch": "x86_64",
+          "action": "Upgraded"
+        },
+        {
+          "name": "openssl",
+          "epoch": 1,
+          "version": "3.2.3",
+          "release": "2.fc41",
+          "arch": "x86_64",
+          "action": "Upgraded"
+        }
+      ],
+      "advisories_applied": [
+        "FEDORA-2026-b8a4f91d"
+      ]
+    },
+    {
+      "id": 43,
+      "cmdline": "dnf5 install -y htop",
+      "timestamp": "2026-11-16T19:15:22Z",
+      "user": "admin",
+      "return_code": 0,
+      "packages_altered": [
+        {
+          "name": "htop",
+          "epoch": 0,
+          "version": "3.3.0",
+          "release": "3.fc41",
+          "arch": "x86_64",
+          "action": "Installed"
+        }
+      ],
+      "advisories_applied": []
+    }
+  ]
+}
