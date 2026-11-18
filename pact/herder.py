@@ -1,7 +1,6 @@
 # ==============================================================================
 # Program: herder.py
 # Programmer: Ethan-da-Tech-Wizard
-# Course: CIS 156 / Advanced Systems
 # Last Modified: November 18, 2026
 # Purpose: Operational supervisor and lifecycle manager for Magi Pact.
 #          Manages 32-seat mesh roster allocations, heartbeat leases, stale seat
