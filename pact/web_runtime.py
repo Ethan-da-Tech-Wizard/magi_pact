@@ -10,6 +10,12 @@ Provides structural validation with zero runtime dependencies.
 # Stdlib only. The CSS/HTML/TypeScript samples are stored as strings and are
 # never parsed or executed here; "validation" is substring matching (see
 # validate_web_spec), so this module has no browser, Node or tsc dependency.
+# Role in magi_pact: WEB_SPECS are the reference snippets; WEB_TRAJECTORIES pair each
+# with a deliberately bad answer to form DPO training rows. export_web_specs() and
+# export_web_corpus() write exchange/web_specs.jsonl and the web corpus shard, and
+# return (row_count, sha256) so the caller can record the checksum.
+# Tested by tests/test_web_runtime.py. Limit: validation is literal substring
+# presence only, so it proves a snippet mentions a feature, not that it renders.
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 import hashlib
@@ -618,6 +624,10 @@ WEB_SPECS: List[WebComponentSpec] = [
 # the sample. The domain here is the dataset domain ("html_css" / "typescript"),
 # which is coarser than WebComponentSpec.kind.
 # Trajectory definitions matching TrainingPair schema for golden master integration
+# Pairing table: each dict links one WEB_SPECS entry (chosen = its snippet) to a
+# hand-written flawed answer (rejected). Keys: id_suffix (stable row id tail),
+# spec_id (must match the spec), domain ('html_css' or 'typescript'), prompt,
+# capabilities (skill tags), and the spec metadata copied into the exported row.
 WEB_TRAJECTORIES: List[Dict[str, Any]] = [
     {
         # id_suffix becomes the record id TWU_GOLD_<suffix>; spec_id links back to WEB_SPECS.
@@ -868,8 +878,11 @@ WEB_TRAJECTORIES: List[Dict[str, Any]] = [
     }
 ]
 
+# Called by export_web_specs() before writing, so a spec edited without updating
+# its rules cannot reach the exchange file.
 def validate_web_spec(spec: WebComponentSpec) -> bool:
     """Validates that a web component spec adheres to all stated rules."""
+    # A single missing rule fails the whole spec (all-or-nothing).
     for rule in spec.validation_rules:
         if rule not in spec.code_snippet:
             return False
@@ -919,6 +932,7 @@ def export_web_specs(dest_path: Optional[Path] = None) -> Tuple[int, str]:
     content = "\n".join(lines) + "\n"
     target.write_text(content, encoding="utf-8")
     sha = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    # Hash of the exact bytes written, so another seat can verify the file it received.
     return len(WEB_SPECS), sha
 
 def export_web_corpus(dest_path: Optional[Path] = None) -> Tuple[int, str]:
