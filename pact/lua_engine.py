@@ -47,6 +47,8 @@ LUA_PROBLEMS: List[LuaTrajectory] = [
         category="metatables",
         prompt="Implement an idiomatic read-only table proxy in Lua using metatables (__index and __newindex) that prevents modifications, allows custom error messages, and supports pairs iteration.",
         # "chosen": the reference solution (a read-only proxy with __index/__newindex/__pairs/__len).
+        # Each metamethod function must be closed with `end,` (they were missing, which
+        # made the sample invalid Lua).
         chosen=(
             "local function make_readonly(tbl, name)\n"
             "    local name = name or 'table'\n"
@@ -55,13 +57,13 @@ LUA_PROBLEMS: List[LuaTrajectory] = [
             "        __index = tbl,\n"
             "        __newindex = function(_, k, _)\n"
             "            error(string.format(\"attempt to modify read-only %s at key '%s'\", name, tostring(k)), 2)\n"
-            "        },\n"
+            "        end,\n"
             "        __pairs = function()\n"
             "            return next, tbl, nil\n"
-            "        },\n"
+            "        end,\n"
             "        __len = function()\n"
             "            return #tbl\n"
-            "        },\n"
+            "        end,\n"
             "        __metatable = 'protected'\n"
             "    }\n"
             "    return setmetatable(proxy, mt)\n"
