@@ -52,12 +52,12 @@ class FirmwareSafetyGate:
         # fwupdmgr verbs that change device state (as opposed to get-* queries).
         r"\bfwupdmgr\s+(?:update|install|reinstall|modify-device-flag)\b",
         r"\bflash\b",
-        # NOTE: "\b" needs a word character on one side. In "...--force" the "-" is not
-        # a word character, so with a space before it neither of these two patterns
-        # will match " --force" / " --reboot" (they only match when glued to a
-        # preceding word char). Other patterns still catch the dangerous commands.
-        r"\b--force\b",
-        r"\b--reboot\b",
+        # Flags start with "-", a non-word character, so "\b" before them can only
+        # match when glued to a preceding word character (never after a space).
+        # A negative lookbehind for word chars and "-" matches the flag at the start
+        # of a token (" --force", "--force") but not inside "x--force" or "---force".
+        r"(?<![\w-])--force\b",
+        r"(?<![\w-])--reboot\b",
         r"\bwrmsr\b",
         # Deleting efivars/firmware sysfs entries can brick boards.
         r"\brm\s+.*(?:efivars|sys/firmware)\b",
