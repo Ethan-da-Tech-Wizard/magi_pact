@@ -139,11 +139,20 @@ def main():
 
     print("-" * 76)
     print(f"Total Partitioned Rows : {res.manifest['total_split_rows']} (Input: {res.total_records})")
-    # Note: the ratio, family count and contamination flag are computed, but the "~15%", "13 families"
-    # and "0 prompts" wording in these lines is fixed text, not measured.
+    # Note: the ratio, family count, overlap counts and contamination flag are computed, but the
+    # "~15%" and "13 families" wording in these lines is fixed text, not measured.
     print(f"Dev Split Ratio        : {res.dev_ratio:.2%} (~15% held out across 13 task families)")
     print(f"Task Families Covered  : {res.manifest['task_families_count']}/13 (100% full coverage)")
-    print(f"Cross-Split Overlap    : 0 prompts (0 exact prompt overlaps between train and dev/eval)")
+    # Overlap figures come from the manifest, which measures them (see
+    # DatasetSplitter.build_manifest), so a contaminated split cannot print "0".
+    overlaps = res.manifest["cross_split_contamination"]
+    total_overlap = (
+        overlaps["train_dev_exact_prompt_overlap"]
+        + overlaps["train_eval_exact_prompt_overlap"]
+        + overlaps["dev_eval_exact_prompt_overlap"]
+    )
+    print(f"Cross-Split Overlap    : {total_overlap} prompts (train/dev {overlaps['train_dev_exact_prompt_overlap']}, "
+          f"train/eval {overlaps['train_eval_exact_prompt_overlap']}, dev/eval {overlaps['dev_eval_exact_prompt_overlap']})")
     print(f"Contamination Free     : {res.manifest['cross_split_contamination']['contamination_free']}")
     print("-" * 76)
     print(f"Manifest Generated     : {args.out_dir / 'split_manifest.json'}")
