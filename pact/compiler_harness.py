@@ -117,6 +117,34 @@ def detect_toolchains() -> Dict[str, ToolchainInfo]:
 
     return toolchains
 
+# Wall-clock limit (seconds) for running a compiled self-test binary.
+EXEC_TIMEOUT_S = 10
+
+
+def _run_binary(bin_file: Path) -> "subprocess.CompletedProcess":
+    """Run a compiled test binary, converting a timeout into a failed result.
+
+    Args:
+        bin_file: Path to the executable to run.
+
+    Returns:
+        The CompletedProcess; on timeout a synthetic one with returncode 124
+        (the `timeout(1)` convention) and a stderr note, so callers build an
+        ordinary failing receipt instead of crashing on TimeoutExpired.
+    """
+    try:
+        return subprocess.run([str(bin_file)], capture_output=True, text=True, timeout=EXEC_TIMEOUT_S)
+    except subprocess.TimeoutExpired as exc:
+        def _txt(v: Any) -> str:
+            # TimeoutExpired may carry bytes or None depending on the platform.
+            return v.decode("utf-8", "replace") if isinstance(v, bytes) else (v or "")
+        return subprocess.CompletedProcess(
+            args=[str(bin_file)], returncode=124,
+            stdout=_txt(exc.stdout),
+            stderr=_txt(exc.stderr) + f"\nExecution timed out after {EXEC_TIMEOUT_S}s",
+        )
+
+
 class IsolatedSandboxRunner:
     """Executes sandboxed compilations and tests in isolated scratch environments."""
 
@@ -167,10 +195,10 @@ class IsolatedSandboxRunner:
                     timestamp=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
                 )
 
-            # Run step. The 10 s timeout bounds runaway tests; note that subprocess.run
-            # raises TimeoutExpired in that case (it is not caught here).
+            # Run step. _run_binary enforces EXEC_TIMEOUT_S and converts a timeout into
+            # a failed result (exit code 124) so a runaway test yields a receipt.
             # Execute
-            res_exec = subprocess.run([str(bin_file)], capture_output=True, text=True, timeout=10)
+            res_exec = _run_binary(bin_file)
             duration_ms = (time.time() - t0) * 1000
             return VerificationReceipt(
                 test_id=test_id, language="c", source_sha256=src_sha,
@@ -219,10 +247,10 @@ class IsolatedSandboxRunner:
                     timestamp=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
                 )
 
-            # Run step. The 10 s timeout bounds runaway tests; note that subprocess.run
-            # raises TimeoutExpired in that case (it is not caught here).
+            # Run step. _run_binary enforces EXEC_TIMEOUT_S and converts a timeout into
+            # a failed result (exit code 124) so a runaway test yields a receipt.
             # Execute
-            res_exec = subprocess.run([str(bin_file)], capture_output=True, text=True, timeout=10)
+            res_exec = _run_binary(bin_file)
             duration_ms = (time.time() - t0) * 1000
             return VerificationReceipt(
                 test_id=test_id, language="cpp", source_sha256=src_sha,
@@ -272,10 +300,10 @@ class IsolatedSandboxRunner:
                     timestamp=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
                 )
 
-            # Run step. The 10 s timeout bounds runaway tests; note that subprocess.run
-            # raises TimeoutExpired in that case (it is not caught here).
+            # Run step. _run_binary enforces EXEC_TIMEOUT_S and converts a timeout into
+            # a failed result (exit code 124) so a runaway test yields a receipt.
             # Execute
-            res_exec = subprocess.run([str(bin_file)], capture_output=True, text=True, timeout=10)
+            res_exec = _run_binary(bin_file)
             duration_ms = (time.time() - t0) * 1000
             return VerificationReceipt(
                 test_id=test_id, language="rust", source_sha256=src_sha,
