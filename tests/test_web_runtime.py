@@ -26,6 +26,7 @@ from pact.dedup import PolicyLeakScanner
 
 class TestWebRuntime(unittest.TestCase):
 
+    """Tests for the web (CSS/HTML/TypeScript) specs and their JSONL corpus export."""
     def test_specs_count_and_rules(self):
         """All 12 specs must exist and satisfy their validation rules."""
         self.assertEqual(len(WEB_SPECS), 12)
@@ -42,6 +43,7 @@ class TestWebRuntime(unittest.TestCase):
         """Verify CSS layouts: holy-grail, clamp fluid typography, print stylesheets, and cascade specificity."""
         spec_map = {s.spec_id: s for s in WEB_SPECS}
 
+        # These tests are substring checks on each spec's code_snippet, i.e. they verify that the key technique is present rather than rendering it.
         # Holy-grail grid
         hg = spec_map["CSS-HOLY-GRAIL-01"]
         self.assertIn("grid-template-areas", hg.code_snippet)
@@ -139,6 +141,7 @@ class TestWebRuntime(unittest.TestCase):
             self.assertEqual(len(sha), 64)
             self.assertTrue(out_file.exists())
 
+            # Re-read the exported JSONL and run the same dedup/leak gate used for every corpus.
             # Read back and audit
             records = []
             with open(out_file, "r", encoding="utf-8") as f:

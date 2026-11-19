@@ -21,16 +21,20 @@ import subprocess
 import sys
 from collections import Counter
 
+# Paths: ROOT_DIR is the repo root; the corpus is written under data/corpus/polyglot and compiled
+# # binaries/sources go to a scratch dir under data/ so nothing lands in the source tree.
 ROOT_DIR = Path(__file__).resolve().parent.parent
 OUTPUT_DIR = ROOT_DIR / "data" / "corpus" / "polyglot"
 OUTPUT_PATH = OUTPUT_DIR / "polyglot_corpus.jsonl"
 SCRATCH_DIR = ROOT_DIR / "data" / "sandbox_scratch" / "polyglot_verify"
 
+# (Needed so "polyglot_corpus_gen" imports work when this file is run directly.)
 # Ensure scripts dir is in sys.path
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
+# Each module holds hand-written SFT/DPO records for one language (see polyglot_corpus_gen/*.py).
 from polyglot_corpus_gen.c_entries import C_ENTRIES
 from polyglot_corpus_gen.cpp_entries import CPP_ENTRIES
 from polyglot_corpus_gen.csharp_entries import CSHARP_ENTRIES
@@ -47,6 +51,7 @@ def verify_c_code(code: str, name: str) -> bool:
     with open(src_file, "w") as f:
         f.write(code)
     comp = subprocess.run(
+        # -Werror makes any warning a failure, so only warning-clean code is accepted into the corpus.
         ["clang", "-Wall", "-Wextra", "-Werror", str(src_file), "-o", str(bin_file), "-lpthread"],
         capture_output=True, text=True
     )
@@ -68,6 +73,7 @@ def verify_cpp_code(code: str, name: str) -> bool:
     with open(src_file, "w") as f:
         f.write(code)
     comp = subprocess.run(
+        # Same strictness as the C check, pinned to C++17 to match what the prompts ask for.
         ["clang++", "-std=c++17", "-Wall", "-Wextra", "-Werror", str(src_file), "-o", str(bin_file), "-lpthread"],
         capture_output=True, text=True
     )
@@ -83,6 +89,8 @@ def verify_cpp_code(code: str, name: str) -> bool:
 
 def verify_syntax(code: str, domain: str) -> bool:
     """Verifies that Java, Rust, and Go codes have proper structure and assertions."""
+    # Heuristic structural check only (no javac/rustc/go toolchain is invoked here): require the
+    # # expected entry-point shape and some form of self-test assertion.
     if domain == "java":
         if "public class" not in code and "public final class" not in code:
             return False
@@ -103,18 +111,22 @@ def verify_syntax(code: str, domain: str) -> bool:
 
 def normalize_record(entry: dict) -> dict:
     """Normalizes record schema so it is compatible with both SFT and DPO trainers."""
+    # Copy so the original module-level entries are never mutated.
     rec = dict(entry)
     kind = rec["kind"]
     if kind == "sft":
+        # SFT rows carry "completion"; mirror it into "chosen" so DPO-style readers also find a code field.
         comp = rec.get("completion") or rec.get("chosen")
         rec["completion"] = comp
         rec["chosen"] = comp
     elif kind == "dpo":
+        # DPO rows: expose the chosen answer as "completion" so SFT-style readers can train on them too.
         rec["completion"] = rec.get("chosen")
     return rec
 
 
 def main():
+    """Verify every polyglot record, write the JSONL corpus, and print a checksum and breakdown summary."""
     print("=" * 70)
     print(" 🚀 MAGI PACT: POLYGLOT DEEP CORPUS BUILDER")
     print("=" * 70)
@@ -135,6 +147,7 @@ def main():
         for i, entry in enumerate(entries):
             rec = normalize_record(entry)
             all_entries.append(rec)
+            # Both kinds now have "chosen"; that is the code that gets verified (rejected code is intentionally flawed and never run).
             code = rec["chosen"]
             eid = rec["id"]
 
@@ -145,12 +158,14 @@ def main():
                 assert verify_cpp_code(code, eid), f"C++ verification failed for {eid}"
                 print(f"  ✓ {eid} compiled and executed cleanly.")
             elif lang == "csharp":
+                # (C# cannot be compiled here: it was validated out of band, so this branch only reports that.)
                 # Verified earlier via task-76 test harness
                 print(f"  ✓ {eid} validated against .NET 8.0 testbed.")
             else:
                 assert verify_syntax(code, lang), f"Syntax/assertion check failed for {eid}"
                 print(f"  ✓ {eid} syntax and self-test assertions verified.")
 
+    # One JSON object per line (JSONL); ensure_ascii=False keeps source code readable.
     # Write output
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
@@ -158,6 +173,7 @@ def main():
             line = json.dumps(rec, ensure_ascii=False)
             f.write(line + "\n")
 
+    # Stream the file in 64 KiB chunks so the hash does not need the whole file in memory.
     # Compute SHA256
     hasher = hashlib.sha256()
     with open(OUTPUT_PATH, "rb") as f:

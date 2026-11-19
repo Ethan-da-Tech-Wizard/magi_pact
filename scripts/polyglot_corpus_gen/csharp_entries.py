@@ -4,11 +4,24 @@ All chosen/completion programs are compilable and runnable with dotnet 8.0, cont
 
 from datetime import datetime, timezone
 
+# Single timestamp shared by all records in this module; evaluated at import time.
 NOW = datetime.now(timezone.utc).isoformat()
 
+# Record schema (shared by every *_entries.py file):
+#   id / domain / kind  - unique TWU_POLY_<LANG>_<KIND>_NNNN id, language tag, and "sft" or "dpo".
+#   prompt              - the instruction a model is trained to answer.
+#   completion          - (sft) a full, runnable reference program that self-tests with assertions.
+#   chosen / rejected   - (dpo) a correct program vs. a plausible but flawed one for the same prompt.
+#   rejection_reason    - (dpo) the concrete defect in "rejected", so the preference signal is explicit.
+#   capabilities        - skill tags used to balance and filter the corpus.
+#   quality             - "execution_verified": the code was compiled and run before being committed.
+#   created_at          - module import time (NOW), not a per-record authoring time.
+# The code bodies are raw strings (r"""...""") so backslashes and escapes in the target language survive intact.
+# SFT entries 1-6 teach whole-program patterns; DPO entries 1-6 teach one specific pitfall each.
 CSHARP_ENTRIES = [
     # ------------------ SFT 001 ------------------
     {
+        # Teaches: Channels-based IAsyncEnumerable pipeline: bounded capacity, backpressure, cancellation propagation.
         "id": "TWU_POLY_CSHARP_SFT_0001",
         "domain": "csharp",
         "kind": "sft",
@@ -99,6 +112,7 @@ public class Program
     },
     # ------------------ SFT 002 ------------------
     {
+        # Teaches: thread-safe O(1) LRU cache: ConcurrentDictionary plus synchronized linked list.
         "id": "TWU_POLY_CSHARP_SFT_0002",
         "domain": "csharp",
         "kind": "sft",
@@ -206,6 +220,7 @@ public class Program
     },
     # ------------------ SFT 003 ------------------
     {
+        # Teaches: zero-allocation ring buffer using Memory<T>/Span<T> with strict bounds.
         "id": "TWU_POLY_CSHARP_SFT_0003",
         "domain": "csharp",
         "kind": "sft",
@@ -312,6 +327,7 @@ public class Program
     },
     # ------------------ SFT 004 ------------------
     {
+        # Teaches: SemaphoreSlim-throttled async worker queue with graceful drain.
         "id": "TWU_POLY_CSHARP_SFT_0004",
         "domain": "csharp",
         "kind": "sft",
@@ -396,6 +412,7 @@ public class Program
     },
     # ------------------ SFT 005 ------------------
     {
+        # Teaches: native resource wrapper using the Dispose pattern and Interlocked.Exchange to block double disposal.
         "id": "TWU_POLY_CSHARP_SFT_0005",
         "domain": "csharp",
         "kind": "sft",
@@ -519,6 +536,7 @@ public class Program
     },
     # ------------------ SFT 006 ------------------
     {
+        # Teaches: async batching processor that flushes on batch size or timeout.
         "id": "TWU_POLY_CSHARP_SFT_0006",
         "domain": "csharp",
         "kind": "sft",
@@ -607,6 +625,7 @@ public class Program
     },
     # ------------------ DPO 001 ------------------
     {
+        # Preference pair. Chosen: correct version. Rejected: async void methods (exceptions cannot be observed by callers); chosen returns Task.
         "id": "TWU_POLY_CSHARP_DPO_0001",
         "domain": "csharp",
         "kind": "dpo",
@@ -667,6 +686,7 @@ public class BuggyAsync
     },
     # ------------------ DPO 002 ------------------
     {
+        # Preference pair. Chosen: correct version. Rejected: closing over the loop variable when starting tasks (all see the final value).
         "id": "TWU_POLY_CSHARP_DPO_0002",
         "domain": "csharp",
         "kind": "dpo",
@@ -727,6 +747,7 @@ public class BuggyLoopClosure
     },
     # ------------------ DPO 003 ------------------
     {
+        # Preference pair. Chosen: correct version. Rejected: concurrent writes to a plain Dictionary (corruption); chosen uses a thread-safe structure.
         "id": "TWU_POLY_CSHARP_DPO_0003",
         "domain": "csharp",
         "kind": "dpo",
@@ -784,6 +805,7 @@ public class BuggyDictionaryRace
     },
     # ------------------ DPO 004 ------------------
     {
+        # Preference pair. Chosen: correct version. Rejected: slicing a span without validating the length of untrusted packets.
         "id": "TWU_POLY_CSHARP_DPO_0004",
         "domain": "csharp",
         "kind": "dpo",
@@ -845,6 +867,7 @@ public class BuggySpanSlice
     },
     # ------------------ DPO 005 ------------------
     {
+        # Preference pair. Chosen: correct version. Rejected: blocking on .Result (sync-over-async deadlock/starvation); chosen awaits.
         "id": "TWU_POLY_CSHARP_DPO_0005",
         "domain": "csharp",
         "kind": "dpo",
@@ -899,6 +922,7 @@ public class DeadlockService
     },
     # ------------------ DPO 006 ------------------
     {
+        # Preference pair. Chosen: correct version. Rejected: IDisposable without idempotency or finalizer suppression.
         "id": "TWU_POLY_CSHARP_DPO_0006",
         "domain": "csharp",
         "kind": "dpo",

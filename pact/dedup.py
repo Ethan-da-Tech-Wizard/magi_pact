@@ -13,6 +13,10 @@ from pathlib import Path
 import re
 from typing import Dict, List, Optional, Tuple, Any, Set
 
+# Tags that identify a task/seat/gold-set item but carry no semantic content.
+# They are removed before comparison so that two prompts differing only by an ID
+# are recognised as the same prompt. All are case-insensitive; the last one is
+# MULTILINE so "^...$" strips a whole "# TASK: ..." header line.
 # Regex patterns for stripping task ID tags
 TASK_ID_PATTERNS = [
     re.compile(r"\[TASK-[0-9a-zA-Z_-]+\]", re.IGNORECASE),
@@ -25,6 +29,10 @@ TASK_ID_PATTERNS = [
     re.compile(r"^#\s*TASK:\s*.*$", re.MULTILINE | re.IGNORECASE),
 ]
 
+# Secret detectors keyed by a human-readable kind (reported as "credential:<kind>").
+# Each pattern targets a vendor-specific token format with a distinctive prefix and
+# minimum length, which keeps false positives low. Note the openai-key pattern
+# uses a negative lookahead so Anthropic "sk-ant-" keys are only reported once.
 # Regex patterns for policy leak detection
 CREDENTIAL_PATTERNS = {
     "aws-access-key": re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
@@ -38,6 +46,8 @@ CREDENTIAL_PATTERNS = {
     "wireguard-private-key": re.compile(r"(?i)\bPrivateKey\s*=\s*([A-Za-z0-9+/]{43}=)"),
 }
 
+# Fleet machine names that must never appear in shared data. Matching is on whole
+# words, case-insensitively (the text is lower-cased first; entries are lower-case).
 # Real private hostnames and hardware identifiers to block (0% leak tolerance)
 PRIVATE_HOSTS = {
     "internal-node-01",
@@ -49,13 +59,23 @@ PRIVATE_HOSTS = {
     "internal-node-07",
 }
 
+# MAC address: six hex pairs with one consistent separator (the backreference \1
+# forces ":" or "-" to be used throughout). Lookarounds stop it matching inside
+# longer hex/colon runs such as IPv6 addresses.
 MAC_RX = re.compile(r"(?<![0-9A-Fa-f:-])(?:[0-9A-Fa-f]{2}([:-]))(?:[0-9A-Fa-f]{2}\1){4}[0-9A-Fa-f]{2}(?![0-9A-Fa-f:-])")
+# All-zero and broadcast MACs are placeholders, not real device identities.
 MAC_IGNORE = re.compile(r"(?i)^(?:00[:-]00[:-]00[:-]00[:-]00[:-]00|ff[:-]ff[:-]ff[:-]ff[:-]ff[:-]ff)$")
+# mDNS and Bonjour names reveal real machines on a private network.
 LOCAL_HOST_RX = re.compile(r"(?i)\b[a-z0-9][a-z0-9-]{1,40}\.local\b")
+# Generic names that are safe to appear in documentation/examples.
 LOCAL_HOST_ALLOWED = {"localhost.local"}
 
+# Applied to the "chosen" side only. A "rejected" answer may legitimately show a
+# destructive command as the bad example; teaching the model to prefer one is not OK.
 # Dangerous / destructive commands that must never be presented as chosen positive training targets
 DESTRUCTIVE_CHOSEN_PATTERNS = {
+    # Note: \b after "/" or "/*" only matches when a word character follows, so this
+    # is a heuristic and not an exhaustive detector.
     "wipe-root": re.compile(r"rm\s+-rf\s+(/|/\*)\b"),
     "wipe-nvram-efivars": re.compile(r"rm\s+-rf\s+/sys/firmware/efi/efivars"),
     "fork-bomb": re.compile(r":\(\)\s*\{\s*:\|:&\s*\};:"),
@@ -75,6 +95,8 @@ def normalize_prompt(prompt: str) -> str:
     """
     text = prompt.strip()
     
+    # Order matters: tags are removed first so their digits do not become <NUM>
+    # tokens, which would leave a visible difference between otherwise equal prompts.
     # 1. Strip task ID tags
     for pat in TASK_ID_PATTERNS:
         text = pat.sub("", text).strip()
@@ -93,10 +115,15 @@ def skeleton_structure_hash(text: str) -> str:
     Strips comments, code fence markers, punctuation, and returns
     a SHA-256 hash of the normalized structural essence.
     """
+    # Unlike normalize_prompt, this works on prose AND code: it strips everything
+    # that is formatting rather than structure (fences, comments, punctuation,
+    # numbers) and hashes what remains, so reformatted copies collide.
     # Remove markdown code fences
     cleaned = re.sub(r"```[a-zA-Z0-9_-]*\n?", "", text)
     cleaned = cleaned.replace("```", "")
     
+    # Caveat: this is a blunt regex, so a "#", "//" or "--" inside a string or URL
+    # also truncates the rest of that line (acceptable for duplicate detection).
     # Remove line comments (#, //, --)
     cleaned = re.sub(r"(#|//|--).*?$", "", cleaned, flags=re.MULTILINE)
     
@@ -106,6 +133,7 @@ def skeleton_structure_hash(text: str) -> str:
     # Normalize digits
     cleaned = re.sub(r"\b\d+\b", "<NUM>", cleaned)
     
+    # Keep "<" and ">" so the <NUM> placeholder survives as a token.
     # Remove punctuation
     cleaned = re.sub(r"[^\w\s<>]", "", cleaned)
     
@@ -118,6 +146,8 @@ def compute_prompt_fingerprint(prompt: str) -> Dict[str, str]:
     """Generates a complete fingerprint dict for prompt duplication analysis."""
     norm = normalize_prompt(prompt)
     return {
+        # Three granularities: exact text, normalized text, and structure-only. Callers
+        # can pick how aggressive a "duplicate" definition they want.
         "raw_sha256": hashlib.sha256(prompt.strip().encode("utf-8")).hexdigest(),
         "normalized_text": norm,
         "normalized_sha256": hashlib.sha256(norm.encode("utf-8")).hexdigest(),
@@ -129,9 +159,17 @@ class PolicyLeakScanner:
     """Scans dataset records with zero-tolerance policy leak rules."""
     
     def __init__(self, private_hosts: Optional[Set[str]] = None):
+        """Use the given host blocklist, or the module default PRIVATE_HOSTS."""
         self.private_hosts = set(private_hosts or PRIVATE_HOSTS)
         
     def scan_text(self, text: str, field_name: str, is_chosen: bool = False) -> List[Dict[str, Any]]:
+        """Return a list of finding dicts for one text field.
+
+        field_name labels where the text came from; is_chosen enables the
+        destructive-command check. Findings never contain the full secret: only
+        a 12-char prefix and a short SHA-256 fingerprint, so audit output cannot
+        itself become a leak.
+        """
         findings = []
         
         # 1. Check for real credentials
@@ -145,6 +183,8 @@ class PolicyLeakScanner:
                     "severity": "CRITICAL",
                 })
                 
+        # (Identity checks below store the match itself, since a MAC/hostname is the
+        # thing being flagged; the fingerprint still allows stable cross-run joins.)
         # 2. Check for MAC addresses
         for m in MAC_RX.finditer(text):
             mac = m.group(0)
@@ -208,6 +248,7 @@ class PolicyLeakScanner:
             findings.extend(self.scan_text(record["chosen"], "chosen", is_chosen=True))
             
         # Scan rejected response (credentials / identity only, not destructive since rejected demonstrates bad behavior)
+        # (is_chosen stays False here, which is what skips the destructive check.)
         if "rejected" in record:
             findings.extend(self.scan_text(record["rejected"], "rejected", is_chosen=False))
             
@@ -215,6 +256,8 @@ class PolicyLeakScanner:
 
     def scan_dataset(self, records: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Scans an entire dataset collection and returns comprehensive audit."""
+        # records_with_findings counts rows; all_findings counts individual hits, so one
+        # bad row can contribute several findings.
         all_findings = []
         records_with_findings = 0
         
@@ -223,6 +266,7 @@ class PolicyLeakScanner:
             if f:
                 records_with_findings += 1
                 for item in f:
+                    # Tag each finding with its row so a human can locate it (falls back to row index).
                     item["record_id"] = rec.get("id", f"row_{idx}")
                     all_findings.append(item)
                     
@@ -248,6 +292,9 @@ def deduplicate_dataset(
        task variations, digit swaps, and ID tag formatting.
     3. Guarantees 0 duplicate prompts and 100% unique prompt ratio.
     """
+    # Three independent "seen" sets: a record is dropped if it repeats the exact
+    # content, or merely repeats the normalized prompt / skeleton of an earlier one
+    # (even with a different answer). First occurrence always wins.
     if scanner is None:
         scanner = PolicyLeakScanner()
         
@@ -264,6 +311,7 @@ def deduplicate_dataset(
         domain = rec.get("domain", "")
         rec_id = rec.get("id", f"rec_{idx}")
         
+        # Domain is part of the key so the same prompt+answer under two domains is kept.
         # 1. Exact content hash
         content_key = f"{domain}:{prompt}:{chosen}"
         c_hash = hashlib.sha256(content_key.encode("utf-8")).hexdigest()
@@ -296,6 +344,8 @@ def deduplicate_dataset(
     raw_count = len(records)
     deduped_count = len(deduped_records)
     dropped_count = len(dropped_records)
+    # input ratio = kept/input; the reported "unique_prompt_ratio" below is a fixed
+    # 1.0 whenever anything survives, because the loop guarantees uniqueness of the output.
     unique_ratio = (deduped_count / raw_count) if raw_count > 0 else 1.0
     
     metrics = {
@@ -311,6 +361,7 @@ def deduplicate_dataset(
 
 @dataclass
 class TrainingGateResult:
+    """Outcome of TrainingGate.evaluate(): overall verdict plus per-gate booleans, metrics and messages."""
     passed: bool
     status: str  # "PASSED" | "FAILED"
     gate_checks: Dict[str, bool]
@@ -319,13 +370,17 @@ class TrainingGateResult:
     timestamp: str
 
     def to_dict(self) -> Dict[str, Any]:
+        """Plain-dict form (JSON-serializable) for writing reports to disk."""
         return asdict(self)
 
 
 class TrainingGate:
     """Strict Gatekeeper validating candidate datasets before training admission."""
     
+    # Every record must carry all of these keys (schema_compliance_gate).
     REQUIRED_FIELDS = ["id", "domain", "kind", "prompt", "chosen", "rejected", "quality", "capabilities", "created_at"]
+    # The corpus must contain at least one record from each of these domains
+    # (domain_coverage_gate); this encodes the fleet's intended language/OS breadth.
     REQUIRED_DOMAINS = [
         "c_cpp", "csharp", "java", "rust", "typescript", "javascript",
         "ruby", "html_css", "bash_posix", "arch_linux", "fedora_linux",
@@ -333,6 +388,7 @@ class TrainingGate:
     ]
     
     def __init__(self, scanner: Optional[PolicyLeakScanner] = None):
+        """Optionally inject a custom scanner (e.g. a different host blocklist)."""
         self.scanner = scanner or PolicyLeakScanner()
         
     def evaluate(
@@ -341,6 +397,13 @@ class TrainingGate:
         manifest_checksum: Optional[str] = None,
         expected_checksum: Optional[str] = None,
     ) -> TrainingGateResult:
+        """Run all six gates and return a TrainingGateResult.
+
+        Gates: policy leaks, duplicate prompts, duplicate content, schema,
+        domain coverage, and manifest checksum. The dataset passes only if every
+        gate passes; violations lists a human-readable reason per failure.
+        manifest_checksum/expected_checksum are compared only when both are given.
+        """
         violations: List[str] = []
         checks: Dict[str, bool] = {
             "policy_leak_gate": True,
@@ -358,6 +421,7 @@ class TrainingGate:
             for f in scan_res["findings"]:
                 violations.append(f"Policy leak ({f['type']}) in {f['record_id']} [{f['field']}]: {f['match']}")
                 
+        # Counted here (not deleted): the gate reports, deduplicate_dataset() repairs.
         # 2. Duplicate Check Gate
         seen_prompts: Set[str] = set()
         seen_skeletons: Set[str] = set()
@@ -398,6 +462,7 @@ class TrainingGate:
                 if field not in rec:
                     checks["schema_compliance_gate"] = False
                     violations.append(f"Missing required field '{field}' in record {rec_id}")
+            # Minimum lengths reject empty/trivial pairs (prompt/chosen >= 10, rejected >= 5 chars).
             if len(rec.get("prompt", "")) < 10:
                 checks["schema_compliance_gate"] = False
                 violations.append(f"Prompt too short (<10 chars) in {rec_id}")
@@ -412,6 +477,7 @@ class TrainingGate:
                 violations.append(f"Missing or empty capabilities list in {rec_id}")
                 
         # 4. Domain Coverage Gate
+        # Any non-listed domain is allowed; only absence of required ones fails.
         present_domains = {rec.get("domain") for rec in records if "domain" in rec}
         missing_domains = [d for d in self.REQUIRED_DOMAINS if d not in present_domains]
         if missing_domains:
@@ -419,6 +485,7 @@ class TrainingGate:
             violations.append(f"Missing required training domains: {missing_domains}")
             
         # 5. Checksum Manifest Gate
+        # Skipped (gate stays True) if either checksum is missing.
         if manifest_checksum and expected_checksum:
             if manifest_checksum != expected_checksum:
                 checks["checksum_manifest_gate"] = False

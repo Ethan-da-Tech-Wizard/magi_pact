@@ -28,7 +28,10 @@ from pact.training import (
 
 class TestFinalPipeline(unittest.TestCase):
 
+    """End-to-end checks of the final pipeline: toolchains, systems/web corpora, dedup gate, VRAM/thermal guards and GGUF plan."""
     def test_toolchain_detection(self):
+        # Only checks that every language has an entry; it does not require that the compiler is installed.
+        """detect_toolchains reports an entry for each supported language."""
         toolchains = detect_toolchains()
         self.assertIn("c", toolchains)
         self.assertIn("cpp", toolchains)
@@ -37,6 +40,7 @@ class TestFinalPipeline(unittest.TestCase):
         self.assertIn("csharp", toolchains)
 
     def test_c_sandbox_execution(self):
+        """A tiny asserting C program compiles and runs cleanly in the isolated sandbox runner."""
         runner = IsolatedSandboxRunner()
         c_code = (
             "#include <stdio.h>\n"
@@ -49,12 +53,14 @@ class TestFinalPipeline(unittest.TestCase):
             "}\n"
         )
         receipt = runner.run_c_test("test-c-01", c_code)
+        # Soft check: if the compiler is missing/fails, the run assertions are skipped rather than failing the suite on machines without a toolchain.
         if receipt.compilation_passed:
             self.assertTrue(receipt.execution_passed)
             self.assertEqual(receipt.exit_code, 0)
             self.assertIn("C verification passed.", receipt.stdout)
 
     def test_cpp_sandbox_execution(self):
+        """A tiny asserting C++ program compiles and runs cleanly in the isolated sandbox runner."""
         runner = IsolatedSandboxRunner()
         cpp_code = (
             "#include <iostream>\n"
@@ -76,6 +82,7 @@ class TestFinalPipeline(unittest.TestCase):
             self.assertIn("CPP verification passed.", receipt.stdout)
 
     def test_systems_firmware_trajectories(self):
+        """Systems trajectories are well formed, BIOS/UEFI ones are read-only, and export writes a hashed file."""
         self.assertGreaterEqual(len(SYSTEMS_CORPUS), 5)
         for traj in SYSTEMS_CORPUS:
             self.assertTrue(traj.trajectory_id.startswith("SYS-"))
@@ -84,6 +91,7 @@ class TestFinalPipeline(unittest.TestCase):
             if traj.subsystem == "bios_uefi_ro":
                 self.assertEqual(traj.safety_classification, "read_only")
                 # Confirm no flashing commands
+                # Read-only BIOS/UEFI trajectories may not contain any flash or write command text.
                 for cmd in traj.commands:
                     self.assertNotIn("flash", cmd)
                     self.assertNotIn("write", cmd)
@@ -96,6 +104,7 @@ class TestFinalPipeline(unittest.TestCase):
             self.assertTrue(out_path.exists())
 
     def test_web_runtime_specs(self):
+        """Every web spec passes its validation rules and export writes a hashed file."""
         self.assertGreaterEqual(len(WEB_SPECS), 4)
         for spec in WEB_SPECS:
             self.assertTrue(validate_web_spec(spec), f"Spec {spec.spec_id} failed validation")
@@ -108,7 +117,9 @@ class TestFinalPipeline(unittest.TestCase):
             self.assertTrue(out_path.exists())
 
     def test_fleet_dedup_and_leak_gate(self):
+        # Two prompts that differ only in a numeric task id must reduce to the same skeleton.
         # 1. Test skeleton extraction
+        """Skeleton extraction, secret-leak scanning and the dedup gate behave as specified."""
         p1 = "How to configure [task id #101] network on Arch Linux?"
         p2 = "How to configure [task id #999] network on Arch Linux?"
         self.assertEqual(FleetDedupEngine.extract_skeleton(p1), FleetDedupEngine.extract_skeleton(p2))
@@ -119,6 +130,7 @@ class TestFinalPipeline(unittest.TestCase):
         self.assertEqual(len(FleetDedupEngine.scan_for_leaks(clean_text)), 0)
         self.assertGreater(len(FleetDedupEngine.scan_for_leaks(leaked_text)), 0)
 
+        # Records 1 and 2 share a skeleton and answer, so 3 rows reduce to 2.
         # 3. Test deduplication and gate
         records = [
             {"prompt": p1, "chosen": "ip link set eth0 up"},
@@ -132,6 +144,7 @@ class TestFinalPipeline(unittest.TestCase):
 
     def test_lora_training_and_thermal_guard(self):
         # 1. RTX 3070 VRAM Budget Verification
+        """Default recipes fit the VRAM ceiling, the slot cap and thermal states work, and the GGUF plan is zero-cost."""
         calc = VRAMBudgetGuard.calculate_memory_footprint(
             model_params_billion=7.6,
             rank=16,
@@ -157,6 +170,7 @@ class TestFinalPipeline(unittest.TestCase):
 
         # 3. Thermal and Concurrency Guard
         guard = ThermalAndConcurrencyGuard(mock_temp=72.0)
+        # The cap is 2 concurrent compute slots; a third acquire must raise.
         # Test concurrency slots (capped at 2)
         slot1 = guard.acquire_slot("worker_c")
         slot2 = guard.acquire_slot("worker_lora")
@@ -169,6 +183,7 @@ class TestFinalPipeline(unittest.TestCase):
         # Thermal states
         state, temp, msg = guard.evaluate_thermal_status()
         self.assertEqual(state.value, "NOMINAL")
+        # 97 C is above the 96 C hard-halt threshold, so the state must be EMERGENCY_HALT.
         guard.set_mock_temp(97.0)
         state_hot, temp_hot, msg_hot = guard.evaluate_thermal_status()
         self.assertEqual(state_hot.value, "EMERGENCY_HALT")

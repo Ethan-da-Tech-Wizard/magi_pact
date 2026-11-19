@@ -62,6 +62,8 @@ engines (like Syncthing, shared NFS volumes, or Git worktrees):
 # ------------------------------------------------------------------------------
 # Standard Library Imports
 # ------------------------------------------------------------------------------
+# fcntl is POSIX-only, so the herder (and anything importing it) does not run
+# on Windows.
 import fcntl          # POSIX file-locking primitives (LOCK_EX, LOCK_UN) for atomic appends
 import json           # Parsing and serializing structured JSON data
 import os             # Low-level operating system interfaces
@@ -95,11 +97,15 @@ from .protocol import (
 # Number of seconds before an active seat with no new heartbeat is flagged as STALE.
 # 300 seconds (5 minutes) provides tolerance for network hiccups while ensuring dead
 # agents don't block seats indefinitely.
+# Heartbeat TTL must exceed the interval at which agents call heartbeat();
+# a seat is only reaped, never deleted, so a late agent can still be recovered.
 DEFAULT_HEARTBEAT_TTL_SECONDS: int = 300
 
 # Number of seconds an advisory file lock (claim) remains valid before expiring.
 # 1800 seconds (30 minutes) gives an agent sufficient time to run tests or compilers
 # without risking a perpetual freeze if the agent crashes during mutation.
+# Claim TTL is deliberately 6x the heartbeat TTL: a lock outlives a brief
+# stall but still self-heals if its holder dies.
 DEFAULT_CLAIM_TTL_SECONDS: int = 1800
 
 
@@ -128,6 +134,8 @@ class PactHerder:
             2. Compute standard child directory paths: `roster`, `board`, `inboxes`, `exchange`.
             3. Compute standard file paths: `claims.json`, `messages.jsonl`, `BRIEF.md`.
         """
+        # Note: no I/O happens in the constructor; directories are created lazily by
+        # initialize_workspace() and the _write_json helper.
         # Ensure the root path is resolved to an absolute, symlink-free canonical path
         self.root: Path = Path(root_dir).resolve()
 
@@ -180,12 +188,15 @@ class PactHerder:
         self.exchange_dir.mkdir(parents=True, exist_ok=True)
 
         # Step 2: Initialize individual inboxes for point-to-point peer routing
+        # Mailboxes are per-seat directories so a directed message never needs a lock.
         for i in range(MAX_SEATS):
             (self.inboxes_dir / f"seat_{i:02d}").mkdir(exist_ok=True)
 
         # Step 3: Initialize 32-seat roster grid files
         for i in range(MAX_SEATS):
             seat_file = self.roster_dir / f"seat_{i:02d}.json"
+            # Existing seat files are never overwritten, so re-running initialisation on a
+            # live workspace is safe (idempotent).
             if not seat_file.exists():
                 seat = create_vacant_seat(i)
                 # Seat 00 is designated as the Host / Arbitrator node
@@ -208,6 +219,7 @@ class PactHerder:
             self.messages_file.touch()
 
         # Step 6: Initialize room brief markdown file
+        # Only created once; an existing BRIEF.md (possibly hand-edited) is preserved.
         if not self.brief_file.exists():
             self.brief_file.write_text(
                 "# Production Brief & Active Objectives\n\n"
@@ -241,6 +253,7 @@ class PactHerder:
             3. Read each `roster/seat_XX.json` from disk; if missing, synthesize a VACANT record.
             4. Return the assembled list of seat states.
         """
+        # Side effect: listing the roster may rewrite seat files (ACTIVE -> STALE).
         # Opportunistic garbage collection: reap any dead nodes before reporting roster
         self.reap_stale_seats()
 
@@ -337,6 +350,9 @@ class PactHerder:
         self.reap_stale_seats()
 
         # Step 2: Determine target seat index
+        # Read-modify-write on the seat file is not locked: two processes claiming the
+        # same vacant seat at the same instant could both succeed. The incumbent check
+        # below only protects seats that are already ACTIVE on disk.
         target_id = seat_id if seat_id is not None else self.find_vacant_seat()
         if target_id is None or not (0 <= target_id < MAX_SEATS):
             raise RuntimeError("No vacant seats available (all 32 occupied or requested seat invalid)")
@@ -344,6 +360,7 @@ class PactHerder:
         # Step 3: Check for incumbent protection
         seat_file = self.roster_dir / f"seat_{target_id:02d}.json"
         current = self._read_json(seat_file) if seat_file.exists() else create_vacant_seat(target_id)
+        # Seat 00 (host) is exempt so the host can always re-claim its own seat.
         if current.get("status") == SeatState.ACTIVE and target_id != 0:
             raise RuntimeError(f"Seat {target_id:02d} is already actively claimed by {current.get('occupant')}")
 
@@ -392,6 +409,8 @@ class PactHerder:
             3. Atomically overwrite `roster/seat_XX.json` with the vacant record.
             4. Broadcast a `SEAT_RELEASE` event to the global message board.
         """
+        # Release is unconditional on who calls it: the CLI is trusted to pass the
+        # caller's own seat id.
         if seat_id == 0:
             raise ValueError("Host seat 00 cannot be released via client")
 
@@ -423,6 +442,8 @@ class PactHerder:
             3. If status is `ACTIVE`, set `last_heartbeat` to `current_iso()`.
             4. Atomically write the updated record back to disk.
         """
+        # Heartbeats are silently ignored for missing or non-ACTIVE seats (e.g. a seat
+        # already marked STALE is not resurrected here; it must be re-claimed).
         seat_file = self.roster_dir / f"seat_{seat_id:02d}.json"
         if not seat_file.exists():
             return
@@ -475,6 +496,9 @@ class PactHerder:
             if not hb_str:
                 continue
 
+            # Zulu suffix is rewritten to +00:00 because datetime.fromisoformat only
+            # accepts "Z" on Python 3.11+. A naive timestamp would be interpreted in local
+            # time by dt.timestamp(), so writers are expected to emit UTC with an offset/Z.
             try:
                 # Handle standard Zulu ('Z') ISO-8601 UTC timestamp format
                 if hb_str.endswith("Z"):
@@ -535,6 +559,9 @@ class PactHerder:
         line = json.dumps(env, sort_keys=True) + "\n"
 
         # Step 2: Atomic thread/process safe append with POSIX advisory lock
+        # Append mode + exclusive flock: each message is one whole line even with many
+        # concurrent writers. The lock is released explicitly; closing the file would
+        # also release it.
         with self.messages_file.open("a", encoding="utf-8") as f:
             try:
                 # Lock exclusively to serialize concurrent appends across local processes
@@ -546,6 +573,8 @@ class PactHerder:
                 fcntl.flock(f.fileno(), fcntl.LOCK_UN)
 
         # Step 3: Route to recipient mailbox if this is a directed point-to-point message
+        # Direct messages are duplicated into the recipient's inbox (the board log
+        # remains the full audit trail). Out-of-range seat ids are only logged, not delivered.
         to_seat = env.get("to_seat")
         if to_seat is not None and (0 <= to_seat < MAX_SEATS):
             inbox_item = self.inboxes_dir / f"seat_{to_seat:02d}" / f"msg_{env['msg_id']}.json"
@@ -568,6 +597,8 @@ class PactHerder:
         """
         if not self.messages_file.exists():
             return []
+        # Reads the whole log into memory then slices; fine for modest logs, but cost
+        # grows with journal size. Lines that fail to parse are skipped, not fatal.
         lines = self.messages_file.read_text(encoding="utf-8").strip().splitlines()
         results: List[Dict[str, Any]] = []
         for line in lines[-limit:]:
@@ -596,6 +627,8 @@ class PactHerder:
         if not inbox.exists():
             return []
         items: List[Dict[str, Any]] = []
+        # Sorted by filename (msg_<id>); ordering equals chronological order only if
+        # msg ids sort that way. Messages are not deleted after being read.
         for p in sorted(inbox.glob("*.json")):
             try:
                 items.append(self._read_json(p))
@@ -643,15 +676,20 @@ class PactHerder:
             5. Broadcast a `CLAIM_LOCK` message to notify peers.
             6. Return True (lock acquired).
         """
+        # Read-modify-write of claims.json without a lock: the atomic rename protects
+        # readers from torn files, but two simultaneous acquirers can still overwrite
+        # each other's entry (last writer wins).
         data = self._read_json(self.claims_file) if self.claims_file.exists() else {"schema": 1, "claims": {}}
         claims = data.get("claims", {})
         now = time.time()
 
         # Step 1: Check existing lock status
+        # Expired claims are simply overwritten, so no separate cleanup pass is needed.
         if resource_path in claims:
             existing = claims[resource_path]
             expires = existing.get("expires_epoch", 0)
             # If lock is still valid and held by another seat, reject acquisition
+            # The same seat re-acquiring just refreshes the TTL and intent.
             if now < expires and existing.get("seat_id") != seat_id:
                 return False
 
@@ -700,6 +738,7 @@ class PactHerder:
 
         if resource_path in claims:
             # Authorization check: only holder or Seat 00 host arbitrator can release
+            # Seat 00 (host/arbitrator) may force-release any claim.
             if claims[resource_path].get("seat_id") != seat_id and seat_id != 0:
                 return False
 
@@ -738,6 +777,8 @@ class PactHerder:
         data = self._read_json(self.claims_file)
         claims = data.get("claims", {})
         now = time.time()
+        # Expiry is evaluated at read time; expired entries remain in the file until
+        # overwritten or released.
         # Filter out expired locks
         return {k: v for k, v in claims.items() if v.get("expires_epoch", 0) > now}
 
@@ -784,6 +825,10 @@ class PactHerder:
         Outputs:
             None.
         """
+        # NOTE: `with_suffix` swaps the extension, so "seat_01.json" is staged as
+        # "seat_01.tmp" (not "seat_01.json.tmp"). Concurrent writers to the same path
+        # share that temp name. No fsync is issued, so atomicity is against concurrent
+        # readers, not a guarantee of durability across power loss.
         # Ensure parent directory exists
         path.parent.mkdir(parents=True, exist_ok=True)
 

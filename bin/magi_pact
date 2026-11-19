@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
+# Thin launcher so the CLI can be run straight from a checkout (bin/magi_pact ...) without installing the package.
 import sys
 from pathlib import Path
 
-# Add parent directory to sys.path
+# Put the repo root (the parent of bin/) first on sys.path so "pact" resolves to this checkout.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+# Imported after the sys.path change above, so it must stay below it.
 from pact.cli import main
 
+# Same entry point the "magi" and "magi-pact" console scripts in setup.py use.
 if __name__ == "__main__":
     main()

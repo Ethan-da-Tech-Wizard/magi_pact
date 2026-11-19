@@ -5,6 +5,8 @@ under strict zero-cloud-spend ($0.00), <= 7.2 GB VRAM ceiling, max 2 concurrency
 and 96°C thermal safety guard. Supports both Vanilla and /abli Abliterated base models.
 """
 
+# Stdlib only: the actual training runs are not launched from this module; it
+# builds and checks recipes, budgets, guards and manifests around them.
 from dataclasses import dataclass, field, asdict
 from enum import Enum
 import json
@@ -16,22 +18,32 @@ import time
 from typing import Dict, Any, List, Optional, Tuple
 
 
+# Hardware limits are module-level constants so the guards, recipes and tests
+# all share one source of truth. All memory figures are in MiB (1024*1024 bytes).
 # ==============================================================================
 # 1. HARDWARE CONSTANTS & MEMORY BUDGET (RTX 3070 8GB)
 # ==============================================================================
 
 GPU_TOTAL_VRAM_MB = 8192.0          # 8.0 GB physical VRAM on RTX 3070
+# 7372.8 MB = 0.90 * 8192 MB, i.e. 7.2 GB.
 MAX_VRAM_ALLOCATION_MB = 7372.8     # Strict <= 7.2 GB limit (90% capacity ceiling)
+# 819.2 MB = 0.10 * 8192 MB; the complement of MAX_VRAM_ALLOCATION_MB.
 MIN_HEADROOM_MB = 819.2             # Reserved for display server (X11/Wayland) & CUDA runtime
 
 MAX_CONCURRENT_SLOTS = 2            # Strict mesh limit for local heavy compute runs
 
+# Thermal ladder: WARN(85) < PAUSE(90) < EMERGENCY(96); RESUME(75) is lower
+# than PAUSE so the job does not flap on/off around a single threshold
+# (hysteresis).
 # Thermal thresholds in Celsius
 THERMAL_WARN_TEMP = 85.0            # High temperature warning logged
 THERMAL_PAUSE_TEMP = 90.0           # Proactive pause to allow cooling
 THERMAL_EMERGENCY_TEMP = 96.0       # Hard emergency halt limit
 THERMAL_RESUME_TEMP = 75.0          # Hysteresis threshold to resume execution
 
+# The seven linear projections of a Llama/Qwen-style transformer block that
+# LoRA adapters attach to (attention q/k/v/o plus the MLP gate/up/down).
+# Recipes must match this list exactly (see validate()).
 LORA_TARGET_MODULES = [
     "q_proj",
     "k_proj",
@@ -44,6 +56,7 @@ LORA_TARGET_MODULES = [
 
 
 class ThermalState(str, Enum):
+    """Result of a temperature check; str-valued so it serialises straight to JSON."""
     NOMINAL = "NOMINAL"
     WARNING = "WARNING"
     PAUSED = "PAUSED"
@@ -51,6 +64,7 @@ class ThermalState(str, Enum):
 
 
 class OrchestratorState(str, Enum):
+    """Lifecycle states of TrainingOrchestrator; every change is logged via _transition()."""
     IDLE = "IDLE"
     INITIALIZING = "INITIALIZING"
     PRE_FLIGHT_PASSED = "PRE_FLIGHT_PASSED"
@@ -81,12 +95,18 @@ class ThermalEmergencyHaltError(RuntimeError):
     pass
 
 
+# Recipes are plain dataclasses; validate() pins the "strict" values that the
+# VRAM budget was computed for, so a recipe cannot silently drift from them.
 # ==============================================================================
 # 2. RECIPES (SFT & DPO)
 # ==============================================================================
 
 @dataclass
 class SFTRecipe:
+    """Supervised fine-tuning (LoRA on a 4-bit base) hyperparameters for the 8 GB card.
+
+    Defaults encode the house recipe; validate() enforces the non-negotiable ones.
+    """
     recipe_id: str = "lora-sft-rtx3070-v1"
     base_model: str = "Qwen/Qwen2.5-Coder-7B-Instruct"
     is_abliterated: bool = False
@@ -112,6 +132,10 @@ class SFTRecipe:
     epochs: int = 3
 
     def validate(self):
+        """Assert the recipe still matches the strict constraints; raises AssertionError otherwise.
+
+        Note these are ``assert`` statements, so they disappear under ``python -O``.
+        """
         assert self.learning_rate == 1.5e-4, f"SFT learning rate must be 1.5e-4, got {self.learning_rate}"
         assert self.micro_batch_size == 1, f"Micro-batch size must be 1, got {self.micro_batch_size}"
         assert 16 <= self.rank <= 32, f"Rank r must be in range [16, 32], got {self.rank}"
@@ -123,6 +147,12 @@ class SFTRecipe:
 
 @dataclass
 class DPORecipe:
+    """Direct Preference Optimization hyperparameters, layered on the SFT adapter.
+
+    Same hardware constraints as SFTRecipe; differences are the lower learning
+    rate, the DPO ``beta`` and the prompt/target length split (1024 + 1024 =
+    max_seq_length).
+    """
     recipe_id: str = "lora-dpo-rtx3070-v1"
     base_model: str = "Qwen/Qwen2.5-Coder-7B-Instruct"
     is_abliterated: bool = False
@@ -130,6 +160,7 @@ class DPORecipe:
     rank: int = 16                          # r = 16..32
     alpha: int = 32                         # alpha = 32..64
     learning_rate: float = 5.0e-5           # Strict requirement: 5e-5
+    # beta scales how strongly the policy is kept near the reference model.
     beta: float = 0.1                       # DPO temperature parameter
     lr_scheduler: str = "cosine"
     warmup_ratio: float = 0.05
@@ -147,11 +178,13 @@ class DPORecipe:
     use_double_quant: bool = True
     torch_dtype: str = "bfloat16"
     dataset_path: str = "data/datasets/golden_multilang_corpus.jsonl"
+    # Starting point: the adapter produced by the SFT stage.
     sft_adapter_path: Optional[str] = "exchange/adapters/sft"
     output_dir: str = "exchange/adapters/dpo"
     epochs: int = 2
 
     def validate(self):
+        """Same strict checks as SFTRecipe.validate but with the DPO learning rate (5e-5)."""
         assert self.learning_rate == 5.0e-5, f"DPO learning rate must be 5e-5, got {self.learning_rate}"
         assert self.micro_batch_size == 1, f"Micro-batch size must be 1, got {self.micro_batch_size}"
         assert 16 <= self.rank <= 32, f"Rank r must be in range [16, 32], got {self.rank}"
@@ -161,6 +194,8 @@ class DPORecipe:
         assert self.load_in_4bit is True, "4-bit quantization must be enabled to fit in 8GB VRAM"
 
 
+# The estimator is analytic (no GPU needed) so recipes can be rejected before
+# any model is loaded.
 # ==============================================================================
 # 3. VRAM BUDGET CALCULATOR & MEMORY LIMIT GUARD
 # ==============================================================================
@@ -168,6 +203,8 @@ class DPORecipe:
 class VRAMBudgetGuard:
     """Calculates and verifies exact GPU memory limits to enforce <= 7.2 GB VRAM ceiling."""
 
+    # Static: takes every model dimension as an argument; defaults describe a ~7.6B
+    # Qwen2.5-Coder-7B-like model.
     @staticmethod
     def calculate_memory_footprint(
         model_params_billion: float = 7.6,
@@ -182,6 +219,8 @@ class VRAMBudgetGuard:
         intermediate_size: int = 11008,
     ) -> Dict[str, Any]:
         """Calculates precise VRAM footprint in Megabytes and Gigabytes."""
+        # Each numbered block below is one term of the total; they are summed at the end.
+        # These are estimates, not measurements (compare get_live_gpu_memory_used_mb).
         
         # 1. Base Model Weights
         if load_in_4bit:
@@ -191,6 +230,9 @@ class VRAMBudgetGuard:
             # FP16 base weights (would exceed 8GB on 7B+ model)
             base_model_mb = (model_params_billion * 1e9 * 2.0) / (1024 * 1024)
 
+        # LoRA adds two low-rank matrices (d_in x r and r x d_out) per target module.
+        # The per-layer total below is the sum over the 7 modules; the 8*hidden*rank term
+        # covers q,k,v,o (assuming square hidden x hidden projections).
         # 2. LoRA Trainable Parameters across 7 target modules:
         # q, k, v, o: 4 * (d_in * r + r * d_out) = 8 * hidden_size * rank
         # gate, up, down: 2 * (hidden * r + r * inter) + (inter * r + r * hidden) = 6 * hidden * rank (approx)
@@ -208,6 +250,8 @@ class VRAMBudgetGuard:
         lora_weights_mb = (total_lora_params * 2.0) / (1024 * 1024)
         lora_gradients_mb = (total_lora_params * 2.0) / (1024 * 1024)
 
+        # 8-bit optimizers keep two 1-byte moments per trainable parameter; plain AdamW
+        # keeps two fp32 moments (8 bytes).
         # 3. Optimizer State
         if "8bit" in optimizer:
             # Paged AdamW 8-bit: 2 bytes per trainable param (1 byte for 1st moment, 1 byte for 2nd moment)
@@ -216,6 +260,9 @@ class VRAMBudgetGuard:
             # Standard AdamW: 8 bytes per trainable param (two FP32 states)
             optimizer_mb = (total_lora_params * 8.0) / (1024 * 1024)
 
+        # With gradient checkpointing only per-layer inputs are kept (activations are
+        # recomputed in backward); without it a rough 12x multiplier stands in for the
+        # full activation set.
         # 4. Activation Memory
         if gradient_checkpointing:
             # Only checkpointing input activations per layer: b * s * h * 2 bytes * num_layers
@@ -226,6 +273,8 @@ class VRAMBudgetGuard:
             # Full activation backpropagation buffer (huge!)
             activation_mb = (micro_batch * seq_len * hidden_size * 2.0 * num_layers * 12.0) / (1024 * 1024)
 
+        # Fixed allowance for the CUDA context, cuBLAS/PyTorch workspaces and allocator
+        # fragmentation.
         # 5. CUDA Runtime, PyTorch context & Workspace overhead
         cuda_context_mb = 750.0
 
@@ -238,9 +287,11 @@ class VRAMBudgetGuard:
             cuda_context_mb
         )
         total_vram_gb = total_vram_mb / 1024.0
+        # Negative headroom means the plan exceeds the physical card.
         headroom_mb = GPU_TOTAL_VRAM_MB - total_vram_mb
         fits_budget = total_vram_mb <= MAX_VRAM_ALLOCATION_MB
 
+        # Flat JSON-serialisable report; breakdown_mb lets callers see which term dominates.
         return {
             "model_params_billion": model_params_billion,
             "rank": rank,
@@ -268,6 +319,7 @@ class VRAMBudgetGuard:
     @classmethod
     def verify_recipe(cls, recipe: Any) -> Dict[str, Any]:
         """Validates that a training recipe does not exceed the 7.2 GB ceiling."""
+        # Validate first so a malformed recipe fails fast, before the estimate.
         recipe.validate()
         calc = cls.calculate_memory_footprint(
             rank=recipe.rank,
@@ -287,6 +339,8 @@ class VRAMBudgetGuard:
     @staticmethod
     def get_live_gpu_memory_used_mb() -> Optional[float]:
         """Queries nvidia-smi if present for real-time memory usage."""
+        # Any failure (no nvidia-smi, timeout, bad output) maps to None: this is an
+        # optional live probe and must never break a CPU-only machine.
         try:
             res = subprocess.run(
                 ["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"],
@@ -305,14 +359,19 @@ class VRAMBudgetGuard:
 # ==============================================================================
 
 class ThermalAndConcurrencyGuard:
+    # Slot bookkeeping lives in <root>/board/concurrency_slots.json, shared by every
+    # process that uses the same root; there is no file locking, so two processes
+    # acquiring at the same instant could race.
     """Enforces max 2 concurrent runs and respects the 96°C thermal guard."""
 
     def __init__(self, root_dir: Optional[Path] = None, mock_temp: Optional[float] = None):
+        """Anchor on root_dir (default cwd); mock_temp pins a fake temperature for tests."""
         self.root = Path(root_dir or ".").resolve()
         self.slots_file = self.root / "board" / "concurrency_slots.json"
         self._mock_temp = mock_temp
 
     def _ensure_slots_file(self):
+        """Create board/concurrency_slots.json with an empty slot list if missing."""
         self.slots_file.parent.mkdir(parents=True, exist_ok=True)
         if not self.slots_file.exists():
             data = {"active_slots": [], "max_slots": MAX_CONCURRENT_SLOTS}
@@ -324,9 +383,11 @@ class ThermalAndConcurrencyGuard:
         try:
             with open(self.slots_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
+        # Unreadable/corrupt slot file: start from an empty list instead of failing.
         except Exception:
             data = {"active_slots": [], "max_slots": MAX_CONCURRENT_SLOTS}
 
+        # Re-acquiring with the same job id is idempotent and consumes no extra slot.
         active = data.get("active_slots", [])
         if job_id in active:
             return True
@@ -348,6 +409,7 @@ class ThermalAndConcurrencyGuard:
         try:
             with open(self.slots_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
+        # Cannot read the file: report "nothing released" rather than raising.
         except Exception:
             return False
 
@@ -360,6 +422,7 @@ class ThermalAndConcurrencyGuard:
         return False
 
     def list_active_slots(self) -> List[str]:
+        """Return the job ids currently holding slots (empty list if the file is unreadable)."""
         self._ensure_slots_file()
         try:
             with open(self.slots_file, "r", encoding="utf-8") as f:
@@ -374,9 +437,12 @@ class ThermalAndConcurrencyGuard:
 
     def read_gpu_temperature(self) -> float:
         """Reads GPU temperature via nvidia-smi, thermal zones, or mock."""
+        # Test hook takes priority over any real sensor.
         if self._mock_temp is not None:
             return float(self._mock_temp)
 
+        # Sensor preference order: NVIDIA GPU temperature, then Linux thermal zone,
+        # then a safe constant. A missing sensor must not be mistaken for overheating.
         # 1. Query nvidia-smi
         try:
             res = subprocess.run(
@@ -390,6 +456,8 @@ class ThermalAndConcurrencyGuard:
         except Exception:
             pass
 
+        # Thermal-zone files report millidegrees on most kernels, so values > 1000
+        # are divided by 1000. Note this is the CPU/board zone, not the GPU die.
         # 2. Linux thermal zones fallback
         if platform.system() == "Linux":
             thermal_path = Path("/sys/class/thermal/thermal_zone0/temp")
@@ -405,6 +473,7 @@ class ThermalAndConcurrencyGuard:
 
     def evaluate_thermal_status(self) -> Tuple[ThermalState, float, str]:
         """Evaluates current temperature against 96°C guard and pause thresholds."""
+        # Highest threshold wins; checks run from most to least severe.
         temp = self.read_gpu_temperature()
 
         if temp >= THERMAL_EMERGENCY_TEMP:
@@ -446,6 +515,7 @@ class GGUFPipelineConfig:
     quant_types: List[str] = field(default_factory=lambda: ["Q4_K_M", "Q8_0"])
     llama_cpp_tools_dir: str = "/opt/llama.cpp"
 
+    # Note: only builds the command lines; nothing is executed here.
     def generate_conversion_manifest(self) -> Dict[str, Any]:
         """Generates the execution commands and file paths for GGUF export & quant."""
         out = Path(self.output_dir)
@@ -459,6 +529,8 @@ class GGUFPipelineConfig:
             quant_outputs[q] = str(out / fname)
 
         commands = [
+            # Three-step pipeline: LoRA -> GGUF adapter, merge into base as fp16 GGUF,
+            # then llama-quantize the merged file once per requested quant type.
             # 1. Convert PEFT LoRA adapter to standalone GGUF LoRA adapter
             f"python3 {self.llama_cpp_tools_dir}/convert_lora_to_gguf.py {self.adapter_path} "
             f"--outtype f16 --outfile {adapter_gguf}",
@@ -483,6 +555,7 @@ class GGUFPipelineConfig:
             "merged_fp16_gguf": str(merged_fp16_gguf),
             "quantized_outputs": quant_outputs,
             "commands": commands,
+            # Local-only pipeline, so cloud cost is always zero.
             "cloud_cost": 0.00,
             "quant_formats": self.quant_types,
         }
@@ -496,6 +569,7 @@ class TrainingOrchestrator:
     """Manages the full end-to-end training, thermal checks, and quantization state machine."""
 
     def __init__(self, root_dir: Optional[Path] = None, mock_temp: Optional[float] = None):
+        """Create an orchestrator rooted at root_dir; job id is time-stamped to be unique per run."""
         self.root = Path(root_dir or ".").resolve()
         self.guard = ThermalAndConcurrencyGuard(self.root, mock_temp=mock_temp)
         self.state = OrchestratorState.IDLE
@@ -503,6 +577,7 @@ class TrainingOrchestrator:
         self.history: List[Dict[str, Any]] = []
 
     def _transition(self, new_state: OrchestratorState, detail: str = ""):
+        """Record a state change (with wall-clock timestamp) in self.history, then switch state."""
         record = {
             "from": self.state.value,
             "to": new_state.value,
@@ -514,6 +589,8 @@ class TrainingOrchestrator:
 
     def pre_flight_check(self, recipe: Any) -> Dict[str, Any]:
         """Runs VRAM budget validation, slot allocation check, and thermal check."""
+        # Order matters: cheapest/static checks (VRAM math) first, then live sensors,
+        # then slot availability. Each failure also moves the state machine.
         self._transition(OrchestratorState.INITIALIZING, "Starting pre-flight check")
 
         # 1. Validate recipe VRAM limits
@@ -528,6 +605,8 @@ class TrainingOrchestrator:
             self._transition(OrchestratorState.THERMAL_PAUSED, th_msg)
             raise RuntimeError(th_msg)
 
+        # The slot is normally already held by this job (taken in execute_training_cycle),
+        # so this only fails when other jobs fill every slot.
         # 3. Check concurrency slots
         active_slots = self.guard.list_active_slots()
         if len(active_slots) >= MAX_CONCURRENT_SLOTS and self.job_id not in active_slots:
@@ -551,12 +630,16 @@ class TrainingOrchestrator:
         simulate: bool = True,
     ) -> Dict[str, Any]:
         """Executes full SFT -> DPO -> GGUF cycle with thermal and slot tracking."""
+        # Note: the `simulate` flag is not consulted here; this method only walks the
+        # state machine, takes thermal readings and builds receipts/manifests. It does
+        # not launch a training process itself.
         receipt: Dict[str, Any] = {
             "job_id": self.job_id,
             "status": "IN_PROGRESS",
             "stages": {},
         }
 
+        # Held for the whole run and always released in the finally block below.
         # Acquire concurrency slot
         self.guard.acquire_slot(self.job_id)
 
@@ -567,6 +650,7 @@ class TrainingOrchestrator:
 
             # 2. SFT Training
             self._transition(OrchestratorState.SFT_TRAINING, "Executing SFT training stage")
+            # Thermal re-check at the start of each stage; an emergency reading aborts.
             th_state, temp, _ = self.guard.evaluate_thermal_status()
             if th_state == ThermalState.EMERGENCY_HALT:
                 self._transition(OrchestratorState.EMERGENCY_HALTED, "Emergency thermal halt during SFT")
@@ -595,6 +679,7 @@ class TrainingOrchestrator:
                 }
                 self._transition(OrchestratorState.DPO_COMPLETED, "DPO training finished successfully")
 
+            # GGUF stage reads the DPO adapter if one was trained, otherwise the SFT adapter.
             # 4. GGUF Quantization Pipeline
             if export_gguf:
                 self._transition(OrchestratorState.GGUF_CONVERTING, "Generating GGUF Q4_K_M and Q8_0 pipeline")
@@ -613,6 +698,7 @@ class TrainingOrchestrator:
             receipt["status"] = "COMPLETED"
             receipt["history"] = self.history
 
+        # Release the slot even when a stage raised, so a failure cannot leak capacity.
         finally:
             self.guard.release_slot(self.job_id)
 

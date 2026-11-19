@@ -18,11 +18,14 @@ from pathlib import Path
 import sys
 
 # Ensure pact is in sys.path
+# Make the repo root importable so "pact.*" resolves when run directly.
 SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT_DIR = SCRIPT_DIR.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
+# The hardware limits (VRAM ceiling, thermal thresholds, slot count) are constants defined in pact.training;
+# # this CLI only reports them and drives the guards/recipes that enforce them.
 from pact.training import (
     SFTRecipe,
     DPORecipe,
@@ -42,7 +45,9 @@ from pact.abli import AbliteratedRegistry
 
 def cmd_budget(args):
     """Calculates and reports exact VRAM memory breakdown."""
+    # Fall back to the project default rank (16) if the flag is 0/unset.
     rank = args.rank or 16
+    # Analytic estimate (no GPU needed) of per-component memory, compared against the 7.2 GB ceiling.
     res = VRAMBudgetGuard.calculate_memory_footprint(
         model_params_billion=args.params_b,
         rank=rank,
@@ -73,6 +78,7 @@ def cmd_budget(args):
     print(f"Total Estimated VRAM  : {res['total_vram_mb']:>8.2f} MB ({res['total_vram_gb']:.3f} GB)")
     print(f"Remaining Margin      : {res['headroom_mb']:>8.2f} MB ({res['headroom_mb']/1024.0:.3f} GB)")
 
+    # Exit status 1 on overflow so scripts/CI can gate on this command.
     if res["fits_within_budget"]:
         print(f"\n✅ PASS: Configuration fits strictly within <= 7.2 GB VRAM budget.")
     else:
@@ -82,6 +88,7 @@ def cmd_budget(args):
 
 def cmd_thermal(args):
     """Queries real-time GPU thermal state and checks concurrency slots."""
+    # mock_temp substitutes a fake reading so the thresholds can be exercised without a GPU.
     guard = ThermalAndConcurrencyGuard(ROOT_DIR, mock_temp=args.mock_temp)
     state, temp, msg = guard.evaluate_thermal_status()
     slots = guard.list_active_slots()
@@ -107,6 +114,7 @@ def cmd_recipes(args):
     recipes_dir = ROOT_DIR / "data" / "training_recipes"
     recipes_dir.mkdir(parents=True, exist_ok=True)
 
+    # For /abli runs the base model is the currently active abliterated profile from the registry, unless --base-model overrides it.
     is_abli = args.abli
     base_model = args.base_model
     if is_abli and not base_model:
@@ -121,6 +129,7 @@ def cmd_recipes(args):
         rank=args.rank or 16,
         alpha=args.alpha or 32,
     )
+    # validate() uses assert statements (AssertionError on a bad rank/alpha/lr/target set; skipped under python -O), so bad configs never reach disk.
     sft.validate()
 
     dpo = DPORecipe(
@@ -131,6 +140,7 @@ def cmd_recipes(args):
     )
     dpo.validate()
 
+    # Files are keyed by model flavour so vanilla and abli recipes never overwrite each other.
     sft_file = recipes_dir / f"sft_{'abli' if is_abli else 'vanilla'}.json"
     dpo_file = recipes_dir / f"dpo_{'abli' if is_abli else 'vanilla'}.json"
 
@@ -159,6 +169,7 @@ def cmd_gguf(args):
     out_dir = ROOT_DIR / "exchange" / "gguf"
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    # Conversion plan only: nothing is converted here. It records the commands to run later.
     pipeline = GGUFPipelineConfig(
         base_model_path=args.base_model or "Qwen/Qwen2.5-Coder-7B-Instruct",
         adapter_path=args.adapter_dir or "exchange/adapters/dpo",
@@ -171,6 +182,7 @@ def cmd_gguf(args):
     manifest_file = out_dir / f"gguf_pipeline_{'abli' if args.abli else 'vanilla'}.json"
     manifest_file.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
+    # These generated scripts are exchange/gguf/convert_vanilla.sh and convert_abli.sh; they echo then run each command under "set -euo pipefail".
     # Generate offline executable shell script
     script_file = out_dir / f"convert_{'abli' if args.abli else 'vanilla'}.sh"
     script_content = "#!/usr/bin/env bash\n# Offline GGUF Conversion ($0.00 cloud spend)\nset -euo pipefail\n\n"
@@ -198,6 +210,7 @@ def cmd_gguf(args):
 
 def cmd_run(args):
     """Executes the orchestrator training state machine cycle."""
+    # The orchestrator owns the job state machine; see pact.training.TrainingOrchestrator for the stages.
     orchestrator = TrainingOrchestrator(ROOT_DIR, mock_temp=args.mock_temp)
 
     sft = SFTRecipe(
@@ -219,11 +232,13 @@ def cmd_run(args):
         sft_recipe=sft,
         dpo_recipe=dpo,
         export_gguf=not args.no_gguf,
+        # Always a simulated cycle: no real training is launched from this CLI.
         simulate=True,
     )
 
     exchange_dir = ROOT_DIR / "exchange"
     exchange_dir.mkdir(parents=True, exist_ok=True)
+    # The receipt records which stages ran, keyed by the orchestrator job id.
     receipt_file = exchange_dir / f"training_receipt_{orchestrator.job_id}.json"
     receipt_file.write_text(json.dumps(receipt, indent=2), encoding="utf-8")
 
@@ -237,9 +252,11 @@ def cmd_run(args):
 
 
 def main():
+    """Build the argparse CLI and dispatch to the selected subcommand (prints help when none is given)."""
     parser = argparse.ArgumentParser(description="LoRA Training, Thermal Guard & GGUF Pipeline Orchestrator")
     sub = parser.add_subparsers(dest="command")
 
+    # Subcommand definitions: each add_parser below maps to a cmd_* function in the dispatch table at the end.
     # budget
     p_b = sub.add_parser("budget", help="Calculate exact VRAM allocation against 7.2 GB ceiling")
     p_b.add_argument("--params-b", type=float, default=7.6, help="Model parameters in billions (default: 7.6B)")
@@ -282,6 +299,7 @@ def main():
         parser.print_help()
         sys.exit(0)
 
+    # Map subcommand name to handler; every handler takes the parsed args.
     dispatch = {
         "budget": cmd_budget,
         "thermal": cmd_thermal,
