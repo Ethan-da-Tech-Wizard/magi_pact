@@ -1,0 +1,36 @@
+"""Regression: the read-only proxy `chosen` sample had unclosed `function` blocks.
+
+No Lua interpreter is assumed on the test host, so this checks the cheapest
+necessary condition for valid Lua: block openers (function/if/for/while) must
+balance `end` keywords once strings and comments are stripped. It would have
+caught the missing `end` after the __newindex/__pairs/__len metamethods.
+"""
+import re
+import unittest
+
+from pact.lua_engine import LUA_PROBLEMS
+
+
+def _strip_strings_and_comments(src: str) -> str:
+    src = re.sub(r"--[^\n]*", "", src)
+    src = re.sub(r'"(?:\\.|[^"\\])*"', '""', src)
+    return re.sub(r"'(?:\\.|[^'\\])*'", "''", src)
+
+
+def _balance(src: str) -> int:
+    words = re.findall(r"\b(function|if|for|while|end)\b", _strip_strings_and_comments(src))
+    return sum(1 if w != "end" else -1 for w in words)
+
+
+class TestLuaBlockBalance(unittest.TestCase):
+    def test_chosen_samples_have_balanced_blocks(self):
+        for p in LUA_PROBLEMS:
+            self.assertEqual(_balance(p.chosen), 0, p.id)
+
+    def test_readonly_proxy_closes_metamethod_functions(self):
+        proxy = next(p for p in LUA_PROBLEMS if p.id == "LUA-READONLY-PROXY-01")
+        self.assertIn("end,", proxy.chosen)
+
+
+if __name__ == "__main__":
+    unittest.main()
