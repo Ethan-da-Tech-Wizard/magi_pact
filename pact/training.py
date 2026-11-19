@@ -11,10 +11,15 @@ from dataclasses import dataclass, field, asdict
 from enum import Enum
 import json
 import os
+try:
+    import fcntl  # POSIX advisory locks; absent on Windows
+except ImportError:  # pragma: no cover
+    fcntl = None
 from pathlib import Path
 import platform
 import subprocess
 import time
+from contextlib import contextmanager
 from typing import Dict, Any, List, Optional, Tuple
 
 
@@ -101,6 +106,17 @@ class ThermalEmergencyHaltError(RuntimeError):
 # 2. RECIPES (SFT & DPO)
 # ==============================================================================
 
+def _require(condition: bool, message: str) -> None:
+    """Raise AssertionError(message) if condition is false.
+
+    Used instead of the ``assert`` statement so recipe validation still runs under
+    ``python -O`` (which strips asserts). Raises AssertionError, not ValueError,
+    so existing callers that catch AssertionError keep working.
+    """
+    if not condition:
+        raise AssertionError(message)
+
+
 @dataclass
 class SFTRecipe:
     """Supervised fine-tuning (LoRA on a 4-bit base) hyperparameters for the 8 GB card.
@@ -134,15 +150,15 @@ class SFTRecipe:
     def validate(self):
         """Assert the recipe still matches the strict constraints; raises AssertionError otherwise.
 
-        Note these are ``assert`` statements, so they disappear under ``python -O``.
+        Implemented with _require (not ``assert``) so it also runs under ``python -O``.
         """
-        assert self.learning_rate == 1.5e-4, f"SFT learning rate must be 1.5e-4, got {self.learning_rate}"
-        assert self.micro_batch_size == 1, f"Micro-batch size must be 1, got {self.micro_batch_size}"
-        assert 16 <= self.rank <= 32, f"Rank r must be in range [16, 32], got {self.rank}"
-        assert 32 <= self.alpha <= 64, f"Alpha must be in range [32, 64], got {self.alpha}"
-        assert self.target_modules == LORA_TARGET_MODULES, "Target modules must match all 7 linear projections"
-        assert self.gradient_checkpointing is True, "Gradient checkpointing must be enabled to stay under 7.2 GB"
-        assert self.load_in_4bit is True, "4-bit quantization must be enabled to fit in 8GB VRAM"
+        _require(self.learning_rate == 1.5e-4, f"SFT learning rate must be 1.5e-4, got {self.learning_rate}")
+        _require(self.micro_batch_size == 1, f"Micro-batch size must be 1, got {self.micro_batch_size}")
+        _require(16 <= self.rank <= 32, f"Rank r must be in range [16, 32], got {self.rank}")
+        _require(32 <= self.alpha <= 64, f"Alpha must be in range [32, 64], got {self.alpha}")
+        _require(self.target_modules == LORA_TARGET_MODULES, "Target modules must match all 7 linear projections")
+        _require(self.gradient_checkpointing is True, "Gradient checkpointing must be enabled to stay under 7.2 GB")
+        _require(self.load_in_4bit is True, "4-bit quantization must be enabled to fit in 8GB VRAM")
 
 
 @dataclass
@@ -185,13 +201,13 @@ class DPORecipe:
 
     def validate(self):
         """Same strict checks as SFTRecipe.validate but with the DPO learning rate (5e-5)."""
-        assert self.learning_rate == 5.0e-5, f"DPO learning rate must be 5e-5, got {self.learning_rate}"
-        assert self.micro_batch_size == 1, f"Micro-batch size must be 1, got {self.micro_batch_size}"
-        assert 16 <= self.rank <= 32, f"Rank r must be in range [16, 32], got {self.rank}"
-        assert 32 <= self.alpha <= 64, f"Alpha must be in range [32, 64], got {self.alpha}"
-        assert self.target_modules == LORA_TARGET_MODULES, "Target modules must match all 7 linear projections"
-        assert self.gradient_checkpointing is True, "Gradient checkpointing must be enabled to stay under 7.2 GB"
-        assert self.load_in_4bit is True, "4-bit quantization must be enabled to fit in 8GB VRAM"
+        _require(self.learning_rate == 5.0e-5, f"DPO learning rate must be 5e-5, got {self.learning_rate}")
+        _require(self.micro_batch_size == 1, f"Micro-batch size must be 1, got {self.micro_batch_size}")
+        _require(16 <= self.rank <= 32, f"Rank r must be in range [16, 32], got {self.rank}")
+        _require(32 <= self.alpha <= 64, f"Alpha must be in range [32, 64], got {self.alpha}")
+        _require(self.target_modules == LORA_TARGET_MODULES, "Target modules must match all 7 linear projections")
+        _require(self.gradient_checkpointing is True, "Gradient checkpointing must be enabled to stay under 7.2 GB")
+        _require(self.load_in_4bit is True, "4-bit quantization must be enabled to fit in 8GB VRAM")
 
 
 # The estimator is analytic (no GPU needed) so recipes can be rejected before
@@ -360,8 +376,8 @@ class VRAMBudgetGuard:
 
 class ThermalAndConcurrencyGuard:
     # Slot bookkeeping lives in <root>/board/concurrency_slots.json, shared by every
-    # process that uses the same root; there is no file locking, so two processes
-    # acquiring at the same instant could race.
+    # process that uses the same root. Read-modify-write cycles are serialized with
+    # an flock on a sidecar lock file (see _slots_lock).
     """Enforces max 2 concurrent runs and respects the 96°C thermal guard."""
 
     def __init__(self, root_dir: Optional[Path] = None, mock_temp: Optional[float] = None):
@@ -377,8 +393,32 @@ class ThermalAndConcurrencyGuard:
             data = {"active_slots": [], "max_slots": MAX_CONCURRENT_SLOTS}
             self.slots_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
+    @contextmanager
+    def _slots_lock(self):
+        """Hold an exclusive advisory lock for a slot-file read-modify-write cycle.
+
+        The lock lives on a sidecar ``concurrency_slots.lock`` file (not the JSON
+        itself) so the JSON can be rewritten while locked. Blocks until acquired.
+        Without fcntl (non-POSIX) this is a no-op.
+        """
+        if fcntl is None:
+            yield
+            return
+        self.slots_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(self.slots_file.with_suffix(".lock"), "a") as lock_f:
+            fcntl.flock(lock_f.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(lock_f.fileno(), fcntl.LOCK_UN)
+
     def acquire_slot(self, job_id: str) -> bool:
         """Acquires one of the 2 concurrency slots. Rejects if all slots full."""
+        with self._slots_lock():
+            return self._acquire_slot_locked(job_id)
+
+    def _acquire_slot_locked(self, job_id: str) -> bool:
+        """acquire_slot body; caller holds _slots_lock."""
         self._ensure_slots_file()
         try:
             with open(self.slots_file, "r", encoding="utf-8") as f:
@@ -405,6 +445,11 @@ class ThermalAndConcurrencyGuard:
 
     def release_slot(self, job_id: str) -> bool:
         """Releases an active concurrency slot."""
+        with self._slots_lock():
+            return self._release_slot_locked(job_id)
+
+    def _release_slot_locked(self, job_id: str) -> bool:
+        """release_slot body; caller holds _slots_lock."""
         self._ensure_slots_file()
         try:
             with open(self.slots_file, "r", encoding="utf-8") as f:
