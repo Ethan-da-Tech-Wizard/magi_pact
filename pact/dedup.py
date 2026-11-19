@@ -74,9 +74,10 @@ LOCAL_HOST_ALLOWED = {"localhost.local"}
 # destructive command as the bad example; teaching the model to prefer one is not OK.
 # Dangerous / destructive commands that must never be presented as chosen positive training targets
 DESTRUCTIVE_CHOSEN_PATTERNS = {
-    # Note: \b after "/" or "/*" only matches when a word character follows, so this
-    # is a heuristic and not an exhaustive detector.
-    "wipe-root": re.compile(r"rm\s+-rf\s+(/|/\*)\b"),
+    # Matches "rm -rf /" and "rm -rf /*" when the target ends at whitespace, a shell
+    # separator or end of string; "rm -rf /tmp/x" must not match. (A trailing \b
+    # never matched at end of string or before a space.) Still a heuristic.
+    "wipe-root": re.compile(r"rm\s+-rf\s+/\*?(?=\s|$|[;&|)])"),
     "wipe-nvram-efivars": re.compile(r"rm\s+-rf\s+/sys/firmware/efi/efivars"),
     "fork-bomb": re.compile(r":\(\)\s*\{\s*:\|:&\s*\};:"),
     "force-push-trunk": re.compile(r"git\s+push\s+--force\s+origin\s+main\b"),
@@ -344,15 +345,19 @@ def deduplicate_dataset(
     raw_count = len(records)
     deduped_count = len(deduped_records)
     dropped_count = len(dropped_records)
-    # input ratio = kept/input; the reported "unique_prompt_ratio" below is a fixed
-    # 1.0 whenever anything survives, because the loop guarantees uniqueness of the output.
+    # input ratio = kept/input. "unique_prompt_ratio" is measured on the surviving
+    # records (distinct normalized prompts / survivors) rather than hardcoded, so a
+    # regression in the loop above would show up here.
     unique_ratio = (deduped_count / raw_count) if raw_count > 0 else 1.0
     
     metrics = {
         "raw_record_count": raw_count,
         "deduplicated_record_count": deduped_count,
         "duplicates_removed": dropped_count,
-        "unique_prompt_ratio": 1.0 if deduped_count > 0 else 0.0,
+        "unique_prompt_ratio": (
+            len({normalize_prompt(r.get("prompt", "")) for r in deduped_records}) / deduped_count
+            if deduped_count > 0 else 0.0
+        ),
         "input_unique_prompt_ratio": round(unique_ratio, 4),
         "dropped_details": dropped_records,
     }
