@@ -201,6 +201,23 @@ class TestDatasetSplits(unittest.TestCase):
                 act_sha = hashlib.sha256((out_path / fname).read_bytes()).hexdigest()
                 self.assertEqual(exp_sha, act_sha, f"Checksum mismatch for {fname}")
 
+    # Regression: the manifest used a hardcoded source_sha256 (stale, matching no real
+    # file) and hardcoded zero overlap counts. Both must now reflect the data.
+    def test_manifest_source_hash_and_overlaps_are_computed(self):
+        records = self.splitter.load_corpus(self.corpus_path)
+        res = self.splitter.partition_records(records)
+        actual = hashlib.sha256(self.corpus_path.read_bytes()).hexdigest()
+        self.assertEqual(res.manifest["source_sha256"], actual)
+        contamination = res.manifest["cross_split_contamination"]
+        # build_manifest counts overlaps itself, so feeding it a leaky split must show it.
+        leaky_dev = res.dev + [dict(res.dpo_train[0])]
+        manifest = self.splitter.build_manifest(
+            res.sft_train, res.dpo_train, leaky_dev, res.eval_heldout, res.total_records, 0.1
+        )
+        self.assertEqual(contamination["train_dev_exact_prompt_overlap"], 0)
+        self.assertEqual(manifest["cross_split_contamination"]["train_dev_exact_prompt_overlap"], 1)
+        self.assertFalse(manifest["cross_split_contamination"]["contamination_free"])
+
     def test_production_splits_exist_and_verified(self):
         """The committed data/datasets files exist and match their manifest counts and hashes."""
         datasets_dir = self.root_dir / "data" / "datasets"

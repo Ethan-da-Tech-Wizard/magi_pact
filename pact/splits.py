@@ -1256,6 +1256,8 @@ class DatasetSplitter:
         """
         # Default root is the repo root (two levels above this file).
         self.root_dir: Path = root_dir or Path(__file__).resolve().parent.parent
+        # SHA-256 of the corpus file last read by load_corpus(); None until then.
+        self._corpus_sha256: Optional[str] = None
 
     def load_corpus(self, corpus_path: Optional[Path] = None) -> List[Dict[str, Any]]:
         """Ingests and validates the master corpus JSONL file from exchange/consolidated/.
@@ -1281,6 +1283,10 @@ class DatasetSplitter:
         path = corpus_path or (self.root_dir / "exchange" / "consolidated" / "golden_master_corpus.jsonl")
         if not path.exists():
             raise FileNotFoundError(f"Corpus file not found: {path}")
+
+        # Hash the exact file bytes so the manifest can record which corpus the splits
+        # came from (build_manifest reads this back via _corpus_sha256).
+        self._corpus_sha256: Optional[str] = hashlib.sha256(path.read_bytes()).hexdigest()
 
         records: List[Dict[str, Any]] = []
         with open(path, "r", encoding="utf-8") as f:
@@ -1396,6 +1402,7 @@ class DatasetSplitter:
             eval_heldout=eval_heldout,
             total_records=total,
             dev_ratio=dev_ratio,
+            source_sha256=self._corpus_sha256,
         )
 
         # checksums stay empty until write_splits() hashes the files.
@@ -1482,6 +1489,7 @@ class DatasetSplitter:
         eval_heldout: List[Dict[str, Any]],
         total_records: int,
         dev_ratio: float,
+        source_sha256: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Constructs a comprehensive manifest describing split metrics and domain statistics.
 
@@ -1492,6 +1500,9 @@ class DatasetSplitter:
             eval_heldout (List[Dict[str, Any]]): Multi-turn benchmark split.
             total_records (int): Total corpus record count.
             dev_ratio (float): Ratio of records held out in dev.
+            source_sha256 (Optional[str]): SHA-256 of the corpus file the records came from.
+                If None (records were not loaded via load_corpus), a hash of the
+                canonical JSON of the split rows is recorded instead.
 
         Outputs:
             Dict[str, Any]: Complete manifest metadata dictionary.
@@ -1524,14 +1535,25 @@ class DatasetSplitter:
             if r.get("domain")
         }))
 
-        # Caution: source_sha256 and the zero overlap counters below are hard-coded
-        # literals, not computed here. The overlap zeros are justified because
-        # verify_zero_cross_split_contamination() would already have raised; the source
-        # hash only matches a specific version of the golden master corpus and is not
-        # recomputed from the file that was actually loaded.
+        # Overlap counts are measured, not assumed, using the same exact-prompt
+        # comparison as verify_zero_cross_split_contamination.
+        train_prompts = {r["prompt"].strip() for r in sft_train} | {r["prompt"].strip() for r in dpo_train}
+        dev_prompts = {r["prompt"].strip() for r in dev}
+        eval_prompts = {r["prompt"].strip() for r in eval_heldout}
+        train_dev = len(train_prompts & dev_prompts)
+        train_eval = len(train_prompts & eval_prompts)
+        dev_eval = len(dev_prompts & eval_prompts)
+
+        # Fallback provenance when the caller did not come from load_corpus().
+        if source_sha256 is None:
+            canonical = json.dumps(
+                [sft_train, dpo_train, dev, eval_heldout], sort_keys=True, ensure_ascii=False
+            )
+            source_sha256 = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
         return {
             "source_corpus": "exchange/consolidated/golden_master_corpus.jsonl",
-            "source_sha256": "546cbee696142c5ec44385a86115c1b99a9e4bd61571de7c47eb23454d5e63f8",
+            "source_sha256": source_sha256,
             "source_total_rows": total_records,
             "chat_template": "qwen3.5_chatml",
             "assistant_only_loss_masking": True,
@@ -1567,10 +1589,10 @@ class DatasetSplitter:
             },
             "total_split_rows": len(sft_train) + len(dpo_train) + len(dev) + len(eval_heldout),
             "cross_split_contamination": {
-                "train_dev_exact_prompt_overlap": 0,
-                "train_eval_exact_prompt_overlap": 0,
-                "dev_eval_exact_prompt_overlap": 0,
-                "contamination_free": True,
+                "train_dev_exact_prompt_overlap": train_dev,
+                "train_eval_exact_prompt_overlap": train_eval,
+                "dev_eval_exact_prompt_overlap": dev_eval,
+                "contamination_free": (train_dev + train_eval + dev_eval) == 0,
             },
             "task_families_covered": all_domains,
             "task_families_count": len(all_domains),
