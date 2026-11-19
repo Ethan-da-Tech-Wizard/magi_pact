@@ -54,16 +54,13 @@ preventing artificial benchmark inflation and data leakage.
 # ------------------------------------------------------------------------------
 # Standard Library Imports
 # ------------------------------------------------------------------------------
-# Stdlib only. `os` and `re` are imported but not used by this module; and
-# `field` / `asdict` are likewise unused. Left in place (comments-only change).
-from dataclasses import dataclass, field, asdict  # Structured class containers
+# Stdlib only; only the names this module actually uses are imported.
+from dataclasses import dataclass                 # Structured class containers
 from datetime import datetime, timezone          # UTC ISO timestamping
 import hashlib                                    # SHA-256 integrity verification
 import json                                       # JSON / JSONL serialization
-import os                                         # Operating system routines
 from pathlib import Path                          # Filesystem path manipulation
-import re                                         # Regular expressions
-from typing import Dict, List, Optional, Set, Tuple, Any  # Type annotations
+from typing import Dict, List, Optional, Set, Any  # Type annotations
 
 # ------------------------------------------------------------------------------
 # Constants and Qwen3.5 ChatML Special Tokens
