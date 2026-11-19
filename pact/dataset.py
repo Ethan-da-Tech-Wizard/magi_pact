@@ -716,9 +716,9 @@ def reconcile_mesh_shards(root_dir: Optional[Path] = None) -> Dict[str, Any]:
     root = Path(root_dir or ".").resolve()
     exchange = root / "exchange"
     if not exchange.is_dir():
-        # Nothing to merge. Note this early-return dict uses different keys than the normal result
-        # below ("unique_records" instead of master_path/domains_covered).
-        return {"total_records": 0, "unique_records": 0, "shards_processed": 0}
+        # Nothing to merge. Return the same keys as the normal result so callers can
+        # index the summary without checking which path ran; no master file is written.
+        return {"master_path": None, "total_records": 0, "shards_processed": 0, "domains_covered": 0}
 
     # seen_hashes implements first-writer-wins dedup in sorted shard order, so the
     # merge result is the same on every box that sees the same shard files.
