@@ -9,6 +9,7 @@ from pact.systems import FirmwareSafetyGate, FirmwareSafetyViolation
 
 
 class TestFirmwareGateFlags(unittest.TestCase):
+    # Includes a bare '--force' at string start to cover the token-start boundary.
     def test_flags_after_a_space_are_blocked(self):
         # Neither command contains another hazardous keyword, so only the flag
         # patterns can block them.
@@ -16,6 +17,8 @@ class TestFirmwareGateFlags(unittest.TestCase):
             with self.assertRaises(FirmwareSafetyViolation, msg=cmd):
                 FirmwareSafetyGate.verify_command_safety(cmd)
 
+    # Guards against over-blocking: legitimate read-only fwupd commands and longer
+    # option names stay allowed (verify_command_safety returns True).
     def test_similar_looking_text_is_not_blocked(self):
         # Flag must start a token and end at a boundary: no false positives on
         # longer option names or read-only fwupd queries.
