@@ -104,6 +104,17 @@ class TestDatasetAndAbli(unittest.TestCase):
             self.assertTrue(p["abliterated"])
             self.assertEqual(p["training_corpus_id"], "golden_multilang_corpus.jsonl")
 
+    # Regression: with no exchange/ directory the summary used a different key set
+    # ("unique_records", no master_path/domains_covered), so the CLI raised KeyError.
+    def test_reconcile_without_exchange_dir_has_same_keys(self):
+        with tempfile.TemporaryDirectory() as empty_root:
+            res = reconcile_mesh_shards(Path(empty_root))
+        self.assertEqual(
+            set(res), {"master_path", "total_records", "shards_processed", "domains_covered"}
+        )
+        self.assertEqual(res["total_records"], 0)
+        self.assertIsNone(res["master_path"])
+
 
 if __name__ == "__main__":
     unittest.main()
