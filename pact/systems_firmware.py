@@ -11,6 +11,16 @@ Guarantees 0% policy leak and deterministic verification.
 """
 # Standard-library only: this module is a static, deterministic corpus plus an
 # exporter, so there are no network or third-party dependencies.
+# Role in magi_pact: the small static corpus of systems-administration trajectories
+# that export_systems_trajectories() writes to exchange/systems_trajectories.jsonl
+# (exercised by tests/test_final_pipeline.py). The larger generator in pact/systems.py
+# is a separate module and holds FirmwareSafetyGate, the command deny-list.
+# Reading a row: `commands` are the shell lines a model should produce,
+# `environment_fixture` the pretend machine state they assume, `expected_output`
+# the text a replay should print, and `verification_rule` a human-readable
+# predicate describing success (it is data for graders; nothing evals it here).
+# Known doc mismatch: the subsystem comment on the dataclass lists "git_worktree"
+# but the git row uses "git_internals"; consumers should match on the data.
 from dataclasses import dataclass, asdict
 import hashlib
 import json
@@ -25,9 +35,11 @@ class SystemsTrajectory:
     renaming a field changes the on-disk training/eval format.
     """
     trajectory_id: str
+    # Machine-readable bucket; lets the sampler balance bash vs packaging vs firmware rows.
     subsystem: str  # "bash" | "arch_pkg" | "fedora_dnf5" | "bios_uefi_ro" | "git_worktree"
     title: str
     scenario: str
+    # Free-form per row; values are fake paths/versions, never real host data.
     environment_fixture: Dict[str, Any]
     commands: List[str]
     expected_output: str
@@ -40,6 +52,8 @@ class SystemsTrajectory:
 # "read_only" / "sandboxed" classes when replaying the commands.
 SYSTEMS_CORPUS = [
     SystemsTrajectory(
+        # Row 1: advisory locking. fd 200 is an arbitrary high descriptor chosen so it
+        # cannot collide with stdin/stdout/stderr; `flock -n` fails fast instead of queuing.
         trajectory_id="SYS-BASH-LOCK-01",
         subsystem="bash",
         title="Atomic Advisory File Locking with POSIX flock and cleanup traps",
@@ -56,6 +70,8 @@ SYSTEMS_CORPUS = [
         safety_classification="sandboxed"
     ),
     SystemsTrajectory(
+        # Row 2: Arch packaging. The sha256 in the check command is the digest of an
+        # empty file, a placeholder fixture, not a real source tarball.
         trajectory_id="SYS-ARCH-PKGBUILD-01",
         subsystem="arch_pkg",
         title="Reproducible Arch Linux PKGBUILD with SHA256 checksums and clean makepkg env",
@@ -71,6 +87,8 @@ SYSTEMS_CORPUS = [
         safety_classification="sandboxed"
     ),
     SystemsTrajectory(
+        # Row 3: Fedora dnf5. Only query/verify commands, so it is classified read_only;
+        # systemd-run caps memory so the check cannot starve the host.
         trajectory_id="SYS-FEDORA-DNF5-01",
         subsystem="fedora_dnf5",
         title="Fedora 41/42 dnf5 transaction resolution with offline gpgcheck and systemd slice",
@@ -104,6 +122,8 @@ SYSTEMS_CORPUS = [
         safety_classification="read_only"
     ),
     SystemsTrajectory(
+        # Row 5: git worktrees give each agent seat an isolated checkout of the same repo,
+        # the mechanism the multi-seat workflow relies on to avoid index-lock collisions.
         trajectory_id="SYS-GIT-WORKTREE-01",
         subsystem="git_internals",
         title="Isolated Git Worktree Pruning and Atomic Reflog Handoff",
@@ -121,6 +141,8 @@ SYSTEMS_CORPUS = [
     )
 ]
 
+# Safe to call repeatedly: it overwrites the target with identical bytes, so a
+# changed digest means the corpus itself changed.
 def export_systems_trajectories(dest_path: Optional[Path] = None) -> Tuple[int, str]:
     """Exports systems trajectories to JSONL and returns row count and sha256."""
     # Destination defaults next to the repo's exchange/ dir; callers (e.g. tests)
