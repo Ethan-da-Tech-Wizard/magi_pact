@@ -135,6 +135,7 @@ def _run_binary(bin_file: Path) -> "subprocess.CompletedProcess":
     try:
         return subprocess.run([str(bin_file)], capture_output=True, text=True, timeout=EXEC_TIMEOUT_S)
     except subprocess.TimeoutExpired as exc:
+        # Normalises captured output of a timed-out child to text for the receipt.
         def _txt(v: Any) -> str:
             # TimeoutExpired may carry bytes or None depending on the platform.
             return v.decode("utf-8", "replace") if isinstance(v, bytes) else (v or "")

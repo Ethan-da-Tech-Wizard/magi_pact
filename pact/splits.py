@@ -1518,6 +1518,7 @@ class DatasetSplitter:
                 counts[d] = counts.get(d, 0) + 1
             return dict(sorted(counts.items()))
 
+        # Per-kind row counts for the split report, sorted so the report is deterministic.
         def kind_counts(rows: List[Dict[str, Any]]) -> Dict[str, int]:
             counts: Dict[str, int] = {}
             for r in rows:

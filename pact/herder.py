@@ -119,6 +119,8 @@ DEFAULT_CLAIM_TTL_SECONDS: int = 1800
 def _locked(method):
     """Run a PactHerder method while holding the workspace state lock (see PactHerder._state_lock)."""
     @wraps(method)
+    # Takes the same lock for the whole read-modify-write so concurrent seats cannot
+    # interleave (see tests/test_herder_locking.py).
     def wrapper(self, *args, **kwargs):
         with self._state_lock():
             return method(self, *args, **kwargs)
