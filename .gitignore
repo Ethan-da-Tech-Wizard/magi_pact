@@ -9,3 +9,7 @@ dist/
 *.egg-info/
 Library/
 .pytest_cache/
+
+# flock sidecar files created by pact.herder / pact.training
+board/*.lock
+board/.herder_state.lock
