@@ -15,6 +15,13 @@ Guarantees 100% distinct prompt skeletons and eliminates template near-duplicate
 """
 # Standard-library only. The corpus below is static data; there is no Lua
 # interpreter dependency here (the Lua text is stored as plain strings).
+# Role in magi_pact: scripts/build_go_lua_datasets.py imports generate_lua_corpus(),
+# concatenates it with the Go corpus, passes the rows through the FleetDedupEngine
+# uniqueness/leak gate (pact/fleet_dedup.py) and writes exchange/seat_03_go_lua.jsonl.
+# Sibling of pact/go_engine.py: same record schema, so the two can be merged.
+# Why Lua source lives in Python strings: the exact bytes are the training label,
+# so the strings must never be reformatted; comments sit between the fields.
+# Limit: no Lua interpreter is run here; tests/test_go_lua.py checks data shape.
 from dataclasses import dataclass, asdict
 import hashlib
 import json
@@ -41,8 +48,10 @@ class LuaTrajectory:
 # Hand-written problem set. The Lua code lives in plain Python string literals
 # joined by implicit concatenation (one source line per "\n"-terminated string),
 # so it is data and must stay byte-exact: it is hashed/exported as-is.
+# Four seed problems: metatables, coroutines, weak caches, pattern parsing.
 LUA_PROBLEMS: List[LuaTrajectory] = [
     LuaTrajectory(
+        # id is copied into the exported record id (LUA_CORPUS_<id>); keep it unique and stable.
         id="LUA-READONLY-PROXY-01",
         category="metatables",
         prompt="Implement an idiomatic read-only table proxy in Lua using metatables (__index and __newindex) that prevents modifications, allows custom error messages, and supports pairs iteration.",
@@ -260,16 +269,19 @@ LUA_PROBLEMS: List[LuaTrajectory] = [
             "assert(res.path == '/v1/status')\n"
             "assert(res.query == 'format=json')\n"
         ),
+        # Last problem of the set; the list closes with no trailing comma on purpose.
         capabilities=["string.match", "patterns", "url-parsing", "validation"]
     )
 ]
 
+# Flatten step is a pure function (no I/O) so tests can call it directly.
 def generate_lua_corpus() -> List[Dict[str, Any]]:
     """Convert LUA_PROBLEMS into flat DPO records for the training pipeline.
 
     Each record gets a ``LUA_CORPUS_`` id prefix, ``domain='lua'``, ``kind='dpo'``
     and quality ``gold_certified`` (these are hand-curated, not model-generated).
     """
+    # Order follows LUA_PROBLEMS so output is reproducible run to run.
     records = []
     for p in LUA_PROBLEMS:
         records.append({
@@ -279,8 +291,11 @@ def generate_lua_corpus() -> List[Dict[str, Any]]:
             "prompt": p.prompt,
             "chosen": p.chosen,
             "rejected": p.rejected,
+            # Hand-curated rather than model-generated, hence the top quality tier.
             "quality": "gold_certified",
             "capabilities": p.capabilities,
+            # Same export key as the Go corpus (which stores its test function here) so
+            # both languages share one record schema in the combined shard.
             "test_assertions": p.test_assertions
         })
     return records

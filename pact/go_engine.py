@@ -17,6 +17,17 @@ DPO pairs provide realistic Go pitfalls:
 """
 # Standard-library only. The Go source is stored as plain strings and never
 # compiled here; it is training data, so it must stay byte-exact.
+# Role in magi_pact: scripts/build_go_lua_datasets.py imports generate_go_corpus(),
+# concatenates it with the Lua corpus, passes the rows through the
+# FleetDedupEngine uniqueness/leak gate (pact/fleet_dedup.py) and writes the
+# result to exchange/seat_03_go_lua.jsonl plus a SHA-256 file.
+# Why Go source lives in Python strings: the pipeline is stdlib-only Python, and
+# the exact bytes (indentation, trailing newlines) are part of the training label,
+# so nothing here may be reformatted. Comments therefore sit between the dataclass
+# fields, never inside the string literals.
+# Adding a problem: append another GoTrajectory with a unique id; keep `chosen`
+# compilable with Go 1.21+ and keep the BUG marker comment in `rejected`.
+# Limit: this module does not run Go; tests/test_go_lua.py checks the data shape.
 from dataclasses import dataclass, asdict
 import hashlib
 import json
@@ -41,10 +52,16 @@ class GoTrajectory:
 
 # Hand-written problem set. Go code is held in Python string literals joined by
 # implicit concatenation, one Go source line per Python line.
+# Four seed problems, one per teaching theme (concurrency lifecycle, data
+# structure under contention, time-based limiting, untrusted-input parsing).
 GO_PROBLEMS: List[GoTrajectory] = [
     GoTrajectory(
+        # id is copied into the exported record id (GO_CORPUS_<id>); keep it unique and stable.
         id="GO-WORKER-POOL-01",
         category="concurrency",
+        # The prompt is what a user would ask; it deliberately names every required
+        # property (cancellation, bounded workers, aggregation) so `chosen` can be checked
+        # against it.
         prompt="Write an idiomatic Go worker pool with context cancellation, bounded worker count, error aggregation with sync.WaitGroup, and a results channel.",
         # Correct worker pool: ctx cancellation, bounded workers, WaitGroup.Add called
         # before the goroutine starts (avoids the Add-inside-goroutine race).
@@ -132,6 +149,8 @@ GO_PROBLEMS: List[GoTrajectory] = [
             "    if atomic.LoadInt64(&counter) != 10 { t.Fatalf(\"expected 10 got %d\", counter) }\n"
             "}\n"
         ),
+        # Capability tags feed the skill-coverage statistics; keep them lowercase tokens.
+        # (A trailing comma after the last field is optional.)
         capabilities=["goroutines", "context", "sync.WaitGroup", "channels"]
     ),
     # Problem 2: sharded concurrent map; keys are spread over ShardCount RWMutex
@@ -205,6 +224,7 @@ GO_PROBLEMS: List[GoTrajectory] = [
             "    wg.Wait()\n"
             "}\n"
         ),
+        # Tags here describe the techniques demonstrated, not the package name.
         capabilities=["sync.RWMutex", "fnv-hash", "sharding", "concurrency"]
     ),
     # Problem 3: token bucket; refill is computed lazily from elapsed time on each
@@ -268,6 +288,8 @@ GO_PROBLEMS: List[GoTrajectory] = [
             "    if l.TryAcquire(1.0) { t.Fatal(\"should have exceeded burst capacity\") }\n"
             "}\n"
         ),
+        # Time-dependent behaviour is tested only through the burst path so the test is
+        # deterministic (no sleeping).
         capabilities=["rate-limiting", "token-bucket", "time.Time", "sync.Mutex"]
     ),
     # Problem 4: binary packet decoder. Header is magic(4)+len(4)+crc32(4), all
@@ -341,10 +363,12 @@ GO_PROBLEMS: List[GoTrajectory] = [
             "    if string(pkt.Payload) != \"hello pact\" { t.Fatalf(\"payload mismatch\") }\n"
             "}\n"
         ),
+        # Parsing problem: the security lesson is bounding length before allocation.
         capabilities=["binary.BigEndian", "crc32", "io.Reader", "input-validation"]
     )
 ]
 
+# Flatten step is a pure function (no I/O) so tests can call it directly.
 def generate_go_corpus() -> List[Dict[str, Any]]:
     """Convert GO_PROBLEMS into flat DPO records for the training pipeline.
 
@@ -352,6 +376,7 @@ def generate_go_corpus() -> List[Dict[str, Any]]:
     quality ``gold_certified`` (hand-curated). ``test_code`` is exported under the
     shared ``test_assertions`` key so all domains use one schema.
     """
+    # Order follows GO_PROBLEMS so output is reproducible run to run.
     records = []
     for p in GO_PROBLEMS:
         records.append({
@@ -361,8 +386,11 @@ def generate_go_corpus() -> List[Dict[str, Any]]:
             "prompt": p.prompt,
             "chosen": p.chosen,
             "rejected": p.rejected,
+            # Hand-curated rather than model-generated, hence the top quality tier.
             "quality": "gold_certified",
             "capabilities": p.capabilities,
+            # Renamed key: the Lua generator exports its assertions under the same field,
+            # so both languages share one record schema in the combined shard.
             "test_assertions": p.test_code
         })
     return records
