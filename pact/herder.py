@@ -67,7 +67,10 @@ engines (like Syncthing, shared NFS volumes, or Git worktrees):
 import fcntl          # POSIX file-locking primitives (LOCK_EX, LOCK_UN) for atomic appends
 import json           # Parsing and serializing structured JSON data
 import os             # Low-level operating system interfaces
+from threading import local as _ThreadStorage  # Per-thread reentrancy depth for the state lock
 import time           # Unix epoch timing for leases and TTL comparisons
+from contextlib import contextmanager  # _state_lock context manager
+from functools import wraps            # Preserve method metadata in _locked
 from datetime import datetime, timezone  # Robust UTC time manipulation and parsing
 from pathlib import Path                 # Object-oriented filesystem path manipulation
 from typing import Any, Dict, List, Optional, Tuple  # Type hints for strict verification
@@ -113,6 +116,15 @@ DEFAULT_CLAIM_TTL_SECONDS: int = 1800
 # PactHerder Class Implementation
 # ==============================================================================
 
+def _locked(method):
+    """Run a PactHerder method while holding the workspace state lock (see PactHerder._state_lock)."""
+    @wraps(method)
+    def wrapper(self, *args, **kwargs):
+        with self._state_lock():
+            return method(self, *args, **kwargs)
+    return wrapper
+
+
 class PactHerder:
     """Operational Herder and State Manager for the Magi Pact 32-Seat Mesh.
 
@@ -150,9 +162,40 @@ class PactHerder:
         self.messages_file: Path = self.board_dir / "messages.jsonl"
         self.brief_file: Path = self.board_dir / "BRIEF.md"
 
+        # Sidecar lock file serializing read-modify-write cycles on seat and claim
+        # files across processes; _lock_state keeps per-thread reentrancy depth.
+        self.lock_file: Path = self.board_dir / ".herder_state.lock"
+        self._lock_state = _ThreadStorage()
+
     # ==========================================================================
     # Workspace Initialization
     # ==========================================================================
+
+    @contextmanager
+    def _state_lock(self):
+        """Hold an exclusive cross-process flock for a read-modify-write cycle.
+
+        Reentrant per thread (claim_seat calls reap_stale_seats, which also locks),
+        because flock on a second descriptor in the same process would deadlock.
+        Blocks until the lock is free.
+        """
+        depth = getattr(self._lock_state, "depth", 0)
+        if depth > 0:
+            self._lock_state.depth = depth + 1
+            try:
+                yield
+            finally:
+                self._lock_state.depth -= 1
+            return
+        self.board_dir.mkdir(parents=True, exist_ok=True)
+        with open(self.lock_file, "a") as lock_f:
+            fcntl.flock(lock_f.fileno(), fcntl.LOCK_EX)
+            self._lock_state.depth = 1
+            try:
+                yield
+            finally:
+                self._lock_state.depth = 0
+                fcntl.flock(lock_f.fileno(), fcntl.LOCK_UN)
 
     def initialize_workspace(
         self,
@@ -310,6 +353,7 @@ class PactHerder:
                 return i
         return None
 
+    @_locked
     def claim_seat(
         self,
         occupant: str,
@@ -350,9 +394,8 @@ class PactHerder:
         self.reap_stale_seats()
 
         # Step 2: Determine target seat index
-        # Read-modify-write on the seat file is not locked: two processes claiming the
-        # same vacant seat at the same instant could both succeed. The incumbent check
-        # below only protects seats that are already ACTIVE on disk.
+        # The whole claim runs under _state_lock (via @_locked), so the vacancy check and
+        # the write below are atomic with respect to other processes.
         target_id = seat_id if seat_id is not None else self.find_vacant_seat()
         if target_id is None or not (0 <= target_id < MAX_SEATS):
             raise RuntimeError("No vacant seats available (all 32 occupied or requested seat invalid)")
@@ -390,6 +433,7 @@ class PactHerder:
 
         return current
 
+    @_locked
     def release_seat(self, seat_id: int, reason: str = "voluntary") -> None:
         """Gracefully vacates an occupied seat, resetting it to VACANT.
 
@@ -427,6 +471,7 @@ class PactHerder:
         )
         self.record_message(env)
 
+    @_locked
     def heartbeat(self, seat_id: int) -> None:
         """Renews an active seat's lease by updating its `last_heartbeat` timestamp.
 
@@ -452,6 +497,7 @@ class PactHerder:
             seat["last_heartbeat"] = current_iso()
             self._write_json(seat_file, seat)
 
+    @_locked
     def reap_stale_seats(self, ttl_seconds: int = DEFAULT_HEARTBEAT_TTL_SECONDS) -> List[int]:
         """Identifies and marks seats as STALE if their heartbeats have lapsed beyond TTL.
 
@@ -640,6 +686,7 @@ class PactHerder:
     # Claims Engine (Distributed Advisory Resource Locks)
     # ==========================================================================
 
+    @_locked
     def acquire_claim(
         self,
         seat_id: int,
@@ -676,9 +723,8 @@ class PactHerder:
             5. Broadcast a `CLAIM_LOCK` message to notify peers.
             6. Return True (lock acquired).
         """
-        # Read-modify-write of claims.json without a lock: the atomic rename protects
-        # readers from torn files, but two simultaneous acquirers can still overwrite
-        # each other's entry (last writer wins).
+        # Runs under _state_lock (via @_locked): the atomic rename protects readers from
+        # torn files and the lock stops two acquirers overwriting each other's entry.
         data = self._read_json(self.claims_file) if self.claims_file.exists() else {"schema": 1, "claims": {}}
         claims = data.get("claims", {})
         now = time.time()
@@ -714,6 +760,7 @@ class PactHerder:
         self.record_message(env)
         return True
 
+    @_locked
     def release_claim(self, seat_id: int, resource_path: str) -> bool:
         """Releases an advisory lock on a resource path.
 
