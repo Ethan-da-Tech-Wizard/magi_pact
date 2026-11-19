@@ -13,6 +13,8 @@ Generates deep, diversified Lua 5.1/5.4/LuaJIT training pairs covering:
 
 Guarantees 100% distinct prompt skeletons and eliminates template near-duplicates.
 """
+# Standard-library only. The corpus below is static data; there is no Lua
+# interpreter dependency here (the Lua text is stored as plain strings).
 from dataclasses import dataclass, asdict
 import hashlib
 import json
@@ -21,6 +23,13 @@ from typing import Dict, List, Optional, Any
 
 @dataclass
 class LuaTrajectory:
+    """One Lua DPO training item: a prompt plus a good and a bad answer and a test.
+
+    Fields: ``id`` unique key; ``category`` topic bucket; ``prompt`` the task;
+    ``chosen`` the correct Lua source; ``rejected`` a plausible but buggy answer
+    (the bug is named in a Lua comment inside it); ``test_assertions`` Lua
+    ``assert`` lines meant to be run after ``chosen``; ``capabilities`` skill tags.
+    """
     id: str
     category: str
     prompt: str
@@ -29,11 +38,15 @@ class LuaTrajectory:
     test_assertions: str
     capabilities: List[str]
 
+# Hand-written problem set. The Lua code lives in plain Python string literals
+# joined by implicit concatenation (one source line per "\n"-terminated string),
+# so it is data and must stay byte-exact: it is hashed/exported as-is.
 LUA_PROBLEMS: List[LuaTrajectory] = [
     LuaTrajectory(
         id="LUA-READONLY-PROXY-01",
         category="metatables",
         prompt="Implement an idiomatic read-only table proxy in Lua using metatables (__index and __newindex) that prevents modifications, allows custom error messages, and supports pairs iteration.",
+        # "chosen": the reference solution (a read-only proxy with __index/__newindex/__pairs/__len).
         chosen=(
             "local function make_readonly(tbl, name)\n"
             "    local name = name or 'table'\n"
@@ -55,6 +68,7 @@ LUA_PROBLEMS: List[LuaTrajectory] = [
             "end\n\n"
             "return make_readonly\n"
         ),
+        # "rejected": the classic mistake of attaching __newindex to the original table.
         rejected=(
             "local function make_readonly(tbl)\n"
             "    -- BUG: Modifying mt on the original table does not intercept updates to existing keys!\n"
@@ -64,6 +78,7 @@ LUA_PROBLEMS: List[LuaTrajectory] = [
             "    return setmetatable(tbl, mt)\n"
             "end\n"
         ),
+        # Assertions that distinguish chosen from rejected behaviour.
         test_assertions=(
             "local ro = make_readonly({ a = 1, b = 2 }, 'config')\n"
             "assert(ro.a == 1)\n"
@@ -74,6 +89,9 @@ LUA_PROBLEMS: List[LuaTrajectory] = [
         ),
         capabilities=["metatables", "__newindex", "__index", "proxy-tables", "error-handling"]
     ),
+    # Problem 2: cooperative scheduler built on coroutines. step() resumes each
+    # live task once and returns whether any task ran, so tests can drive it
+    # deterministically without timers.
     LuaTrajectory(
         id="LUA-COROUTINE-EVENTLOOP-01",
         category="coroutines",
@@ -147,6 +165,9 @@ LUA_PROBLEMS: List[LuaTrajectory] = [
         ),
         capabilities=["coroutine.create", "coroutine.resume", "coroutine.yield", "cooperative-multitasking"]
     ),
+    # Problem 3: memoization. The prompt asks for weak-valued caches while the
+    # reference uses __mode='k' (weak keys); the rejected answer is an unbounded
+    # plain table (a leak).
     LuaTrajectory(
         id="LUA-WEAK-MEMOIZE-01",
         category="data_structures",
@@ -189,6 +210,8 @@ LUA_PROBLEMS: List[LuaTrajectory] = [
         ),
         capabilities=["memoization", "weak-tables", "__mode", "varargs", "closures"]
     ),
+    # Problem 4: URL parsing with Lua patterns only (no regex library); default
+    # ports are inferred for http/https when none is given.
     LuaTrajectory(
         id="LUA-PATTERN-PARSER-01",
         category="string_processing",
@@ -240,6 +263,11 @@ LUA_PROBLEMS: List[LuaTrajectory] = [
 ]
 
 def generate_lua_corpus() -> List[Dict[str, Any]]:
+    """Convert LUA_PROBLEMS into flat DPO records for the training pipeline.
+
+    Each record gets a ``LUA_CORPUS_`` id prefix, ``domain='lua'``, ``kind='dpo'``
+    and quality ``gold_certified`` (these are hand-curated, not model-generated).
+    """
     records = []
     for p in LUA_PROBLEMS:
         records.append({

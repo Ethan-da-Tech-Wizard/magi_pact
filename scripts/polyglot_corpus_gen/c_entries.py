@@ -4,11 +4,24 @@ All chosen/completion programs are compilable with clang/gcc and contain self-te
 
 from datetime import datetime, timezone
 
+# Single timestamp shared by all records in this module; evaluated at import time.
 NOW = datetime.now(timezone.utc).isoformat()
 
+# Record schema (shared by every *_entries.py file):
+#   id / domain / kind  - unique TWU_POLY_<LANG>_<KIND>_NNNN id, language tag, and "sft" or "dpo".
+#   prompt              - the instruction a model is trained to answer.
+#   completion          - (sft) a full, runnable reference program that self-tests with assertions.
+#   chosen / rejected   - (dpo) a correct program vs. a plausible but flawed one for the same prompt.
+#   rejection_reason    - (dpo) the concrete defect in "rejected", so the preference signal is explicit.
+#   capabilities        - skill tags used to balance and filter the corpus.
+#   quality             - "execution_verified": the code was compiled and run before being committed.
+#   created_at          - module import time (NOW), not a per-record authoring time.
+# The code bodies are raw strings (r"""...""") so backslashes and escapes in the target language survive intact.
+# SFT entries 1-6 teach whole-program patterns; DPO entries 1-6 teach one specific pitfall each.
 C_ENTRIES = [
     # ------------------ SFT 001 ------------------
     {
+        # Teaches: thread-safe ring buffer: power-of-two masking, mutex plus two condition variables, no allocation after init.
         "id": "TWU_POLY_C_SFT_0001",
         "domain": "c",
         "kind": "sft",
@@ -124,6 +137,7 @@ int main(void) {
     },
     # ------------------ SFT 002 ------------------
     {
+        # Teaches: bump/arena allocator: alignment padding, bounds checks, O(1) reset.
         "id": "TWU_POLY_C_SFT_0002",
         "domain": "c",
         "kind": "sft",
@@ -204,6 +218,7 @@ int main(void) {
     },
     # ------------------ SFT 003 ------------------
     {
+        # Teaches: growable byte vector: overflow-checked growth and bounds-checked get/set.
         "id": "TWU_POLY_C_SFT_0003",
         "domain": "c",
         "kind": "sft",
@@ -295,6 +310,7 @@ int main(void) {
     },
     # ------------------ SFT 004 ------------------
     {
+        # Teaches: bounded MPMC queue on pthreads: blocking push/pop with a graceful-shutdown flag.
         "id": "TWU_POLY_C_SFT_0004",
         "domain": "c",
         "kind": "sft",
@@ -423,6 +439,7 @@ int main(void) {
     },
     # ------------------ SFT 005 ------------------
     {
+        # Teaches: dynamic bitset on 64-bit words: popcount and edge-of-range handling.
         "id": "TWU_POLY_C_SFT_0005",
         "domain": "c",
         "kind": "sft",
@@ -520,6 +537,7 @@ int main(void) {
     },
     # ------------------ SFT 006 ------------------
     {
+        # Teaches: append-only string builder: always NUL-terminated, geometric growth, no overruns.
         "id": "TWU_POLY_C_SFT_0006",
         "domain": "c",
         "kind": "sft",
@@ -627,6 +645,7 @@ int main(void) {
     },
     # ------------------ DPO 001 ------------------
     {
+        # Preference pair. Chosen: correct version. Rejected: unsynchronized shared counter (data race, lost updates); chosen uses a mutex.
         "id": "TWU_POLY_C_DPO_0001",
         "domain": "c",
         "kind": "dpo",
@@ -715,6 +734,7 @@ int main(void) {
     },
     # ------------------ DPO 002 ------------------
     {
+        # Preference pair. Chosen: correct version. Rejected: strcpy into a fixed buffer (overrun); chosen bounds the copy and terminates.
         "id": "TWU_POLY_C_DPO_0002",
         "domain": "c",
         "kind": "dpo",
@@ -774,6 +794,7 @@ int main(void) {
     },
     # ------------------ DPO 003 ------------------
     {
+        # Preference pair. Chosen: correct version. Rejected: frees a list node before reading its neighbours (use-after-free).
         "id": "TWU_POLY_C_DPO_0003",
         "domain": "c",
         "kind": "dpo",
@@ -858,6 +879,7 @@ void buggy_delete(dnode_t *node) {
     },
     # ------------------ DPO 004 ------------------
     {
+        # Preference pair. Chosen: correct version. Rejected: naive double-checked locking with no barrier (partially published object).
         "id": "TWU_POLY_C_DPO_0004",
         "domain": "c",
         "kind": "dpo",
@@ -929,6 +951,7 @@ engine_config_t *get_config_broken(void) {
     },
     # ------------------ DPO 005 ------------------
     {
+        # Preference pair. Chosen: correct version. Rejected: pop that underflows an unsigned size_t on an empty array.
         "id": "TWU_POLY_C_DPO_0005",
         "domain": "c",
         "kind": "dpo",
@@ -997,6 +1020,7 @@ int buggy_pop(stack_t *s) {
     },
     # ------------------ DPO 006 ------------------
     {
+        # Preference pair. Chosen: correct version. Rejected: early returns that leave a mutex locked; chosen uses single-exit goto cleanup.
         "id": "TWU_POLY_C_DPO_0006",
         "domain": "c",
         "kind": "dpo",

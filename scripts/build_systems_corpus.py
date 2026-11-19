@@ -21,6 +21,7 @@ import re
 import sys
 from typing import Dict, List, Any, Tuple
 
+# Put the repo root first on sys.path so "pact" is importable and wins over any other install.
 # Ensure workspace root is in sys.path
 ROOT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT_DIR))
@@ -38,8 +39,13 @@ from pact.systems import (
 from pact.dedup import PolicyLeakScanner, skeleton_structure_hash
 from pact.fleet_dedup import FleetDedupEngine
 
+# Destination corpus; a .sha256 manifest is written next to it.
 OUTPUT_PATH = ROOT_DIR / "data" / "corpus" / "systems" / "systems_corpus.jsonl"
 
+# Record shape (per dict): domain, id_suffix (becomes TWU_GOLD_<suffix>), prompt, chosen (correct answer),
+# # rejected (plausible anti-pattern), capabilities (tags). The 5 domains each get 5 new entries here
+# # and 3 baseline entries from pact.systems.SYSTEMS_TRAJECTORIES. Entry bodies are Python string
+# # literals, so shell/PKGBUILD/Python snippets appear with escaped quotes and "\n".
 # 25 expanded trajectories to add to the existing 15 baseline trajectories
 EXPANDED_SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
     # -----------------------------------------------------------------
@@ -47,6 +53,7 @@ EXPANDED_SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
     # -----------------------------------------------------------------
     {
         "domain": "bash_posix",
+        # Teaches: check every pipeline stage via PIPESTATUS under pipefail, with FIFO cleanup in a trap. Rejected: plain pipe that masks upstream failures.
         "id_suffix": "BASH_PIPELINE_ERROR_PROPAGATION_0004",
         "prompt": (
             "Write a robust POSIX Bash pipeline script that processes multi-gigabyte log streams "
@@ -95,6 +102,7 @@ EXPANDED_SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
     },
     {
         "domain": "bash_posix",
+        # Teaches: flock-guarded log writes with size-based rotation by atomic rename. Rejected: unsynchronized size check, copy and truncate (racy, can lose writes).
         "id_suffix": "BASH_ROTATING_LOG_LOCK_0005",
         "prompt": (
             "Design a POSIX Bash daemon logging module that provides atomic file-descriptor locking "
@@ -146,6 +154,7 @@ EXPANDED_SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
     },
     {
         "domain": "bash_posix",
+        # Teaches: systemd watchdog/NOTIFY_SOCKET protocol, STOPPING=1 on termination, no orphaned child. Rejected: backgrounds the command and pings forever.
         "id_suffix": "BASH_SYSTEMD_WATCHDOG_NOTIFY_0006",
         "prompt": (
             "Create a production POSIX Bash service wrapper that interfaces with the systemd watchdog "
@@ -206,6 +215,7 @@ EXPANDED_SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
     },
     {
         "domain": "bash_posix",
+        # Teaches: bounded parallelism with a FIFO semaphore, PID tracking and signal-driven cleanup. Rejected: unbounded fork per item.
         "id_suffix": "BASH_PARALLEL_SEMAPHORE_0007",
         "prompt": (
             "Construct a bounded concurrency job runner in POSIX Bash using a named FIFO semaphore, "
@@ -270,6 +280,7 @@ EXPANDED_SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
     },
     {
         "domain": "bash_posix",
+        # Teaches: streaming tar|gzip|tee hashing into a temp file that is atomically moved into place. Rejected: writes the final path directly and leaves a corrupt file if interrupted.
         "id_suffix": "BASH_TAR_STREAM_HASH_0008",
         "prompt": (
             "Implement a streaming POSIX Bash backup archiver that pipes tar through gzip and tee "
@@ -314,6 +325,7 @@ EXPANDED_SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
     # -----------------------------------------------------------------
     {
         "domain": "arch_linux",
+        # Teaches: namcap-clean Go PKGBUILD (PIE, trimpath, checksums, check() tests, /usr/bin). Rejected: no checksums, installs under /usr/local, pollutes the build env.
         "id_suffix": "ARCH_PKGBUILD_GO_PIE_0004",
         "prompt": (
             "Write an idiomatic, namcap-compliant Arch Linux PKGBUILD for a Go network utility "
@@ -369,6 +381,7 @@ EXPANDED_SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
     },
     {
         "domain": "arch_linux",
+        # Teaches: Meson/Ninja shared-library packaging that uses "meson install --destdir" so soname links and pkg-config files are right. Rejected: hand-copies files and omits checksums.
         "id_suffix": "ARCH_PKGBUILD_SHARED_LIB_MESON_0005",
         "prompt": (
             "Create a standard Arch Linux PKGBUILD for a native C shared library built with Meson "
@@ -419,6 +432,7 @@ EXPANDED_SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
     },
     {
         "domain": "arch_linux",
+        # Teaches: PEP 517 flow (python-build, python-installer, wheel) with pytest in check(). Rejected: deprecated "setup.py install".
         "id_suffix": "ARCH_PKGBUILD_PYTHON_PEP517_0006",
         "prompt": (
             "Author a modern Arch Linux PKGBUILD for a Python library following the PEP 517 build standard "
@@ -469,6 +483,7 @@ EXPANDED_SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
     },
     {
         "domain": "arch_linux",
+        # Teaches: declarative sysusers.d/tmpfiles.d plus a unit file, with no install scriptlet. Rejected: useradd inside an .install scriptlet.
         "id_suffix": "ARCH_PKGBUILD_SYSTEMD_SERVICE_SYSUSERS_0007",
         "prompt": (
             "Provide an Arch Linux PKGBUILD for a systems agent daemon that installs a systemd unit, "
@@ -529,6 +544,7 @@ EXPANDED_SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
     },
     {
         "domain": "arch_linux",
+        # Teaches: DKMS packaging (sources under /usr/src/<pkg>-<ver>, dkms.conf, dkms dependency). Rejected: builds against the running host kernel during packaging.
         "id_suffix": "ARCH_PKGBUILD_DKMS_KERNEL_0008",
         "prompt": (
             "Design an Arch Linux PKGBUILD for a out-of-tree hardware kernel driver module using DKMS, "
@@ -583,6 +599,7 @@ EXPANDED_SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
     # -----------------------------------------------------------------
     {
         "domain": "fedora_linux",
+        # Teaches: adding an internal repo with dnf5 config-manager, GPG verification, priority pinning. Rejected: curl into /etc/yum.repos.d and --nogpgcheck.
         "id_suffix": "FEDORA_DNF5_MODULE_COPR_REPO_0004",
         "prompt": (
             "Demonstrate how to safely configure an authenticated internal RPM repository in Fedora 41+ "
@@ -611,6 +628,7 @@ EXPANDED_SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
     },
     {
         "domain": "fedora_linux",
+        # Teaches: read-only pre-flight audit (check-upgrade --json, download, advisories) before deploying. Rejected: blind "yum update --skip-broken".
         "id_suffix": "FEDORA_DNF5_DRYRUN_JSON_AUDIT_0005",
         "prompt": (
             "Construct a programmatic pre-flight transaction audit utility using `dnf5 check-upgrade --json` "
@@ -632,6 +650,7 @@ EXPANDED_SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
     },
     {
         "domain": "fedora_linux",
+        # Teaches: staged, deterministic major-version upgrade with dnf5 system-upgrade and an explicit releasever. Rejected: "rpm -Uvh --nodeps --force" across releases.
         "id_suffix": "FEDORA_DNF5_OFFLINE_SYSTEM_UPGRADE_0006",
         "prompt": (
             "Formulate a deterministic Fedora major-version system upgrade procedure using `dnf5 system-upgrade` "
@@ -656,6 +675,7 @@ EXPANDED_SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
     },
     {
         "domain": "fedora_linux",
+        # Teaches: "dnf5 swap" replaces a provider in one transaction. Rejected: "rpm -e --nodeps" then install, leaving the system broken in between.
         "id_suffix": "FEDORA_DNF5_SWAP_CONFLICT_RESOLUTION_0007",
         "prompt": (
             "Provide the canonical `dnf5 swap` syntax to replace one package provider with an alternative "
@@ -680,6 +700,7 @@ EXPANDED_SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
     },
     {
         "domain": "fedora_linux",
+        # Teaches: dnf5 history inspection/replay/revert and rpm -Va verification. Rejected: grep the legacy yum.log and mass-remove.
         "id_suffix": "FEDORA_DNF5_TRANSACTION_HISTORY_REPLAY_0008",
         "prompt": (
             "Show how to inspect dnf5 transaction logs, export historical transaction IDs, and replay "
@@ -707,6 +728,7 @@ EXPANDED_SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
     # -----------------------------------------------------------------
     {
         "domain": "bios_uefi",
+        # Teaches: read-only SMBIOS Type 0/1 parsing from /sys/class/dmi/id and dmidecode. Rejected: flashrom write (firmware flash).
         "id_suffix": "BIOS_SMBIOS_DMI_TABLE_INSPECTION_0004",
         "prompt": (
             "Write a Python utility to safely parse SMBIOS Type 0 (BIOS Information) and Type 1 (System Information) "
@@ -753,6 +775,7 @@ EXPANDED_SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
     },
     {
         "domain": "bios_uefi",
+        # Teaches: read-only SecureBoot/SetupMode queries from efivars (read flags only). Rejected: opens the EFI variable for writing.
         "id_suffix": "BIOS_UEFI_SECURE_BOOT_STATE_QUERY_0005",
         "prompt": (
             "Construct a Python verification script that queries UEFI SecureBoot state and SetupMode "
@@ -795,6 +818,7 @@ EXPANDED_SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
     },
     {
         "domain": "bios_uefi",
+        # Teaches: parse "fwupdmgr security --json" for an HSI score, TPM 2.0 and IOMMU status, with no update actions. Rejected: runs "fwupdmgr update" (physical flash).
         "id_suffix": "BIOS_FWUPD_SECURITY_ATTRS_HSI_0006",
         "prompt": (
             "Create a safe parser for `fwupdmgr security --json` output to calculate the Host Security "
@@ -835,6 +859,7 @@ EXPANDED_SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
     },
     {
         "domain": "bios_uefi",
+        # Teaches: parse "efibootmgr -v" (BootCurrent, BootOrder, Boot#### entries) read-only. Rejected: deletes entries and rewrites BootOrder.
         "id_suffix": "BIOS_UEFI_BOOT_ORDER_INSPECTION_0007",
         "prompt": (
             "Develop a read-only Python parser for `efibootmgr -v` output that parses BootCurrent, "
@@ -879,6 +904,7 @@ EXPANDED_SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
     },
     {
         "domain": "bios_uefi",
+        # Teaches: read-only PCI option-ROM inspection with 0x55AA header validation. Rejected: writes to the device ROM file.
         "id_suffix": "BIOS_PCI_EXPANSION_ROM_QUERY_0008",
         "prompt": (
             "Author a safe Python routine to inspect PCI Option ROMs and expansion firmware via "
@@ -924,6 +950,7 @@ EXPANDED_SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
     # -----------------------------------------------------------------
     {
         "domain": "git_internals",
+        # Teaches: agent handoff with "git worktree lock --reason", porcelain verification and unlock. Rejected: rm -rf of the worktree directory, leaving stale .git/worktrees entries.
         "id_suffix": "GIT_WORKTREE_ATOMIC_LOCK_HANDOFF_0004",
         "prompt": (
             "Detail a collaborative Git worktree locking and handoff protocol between concurrent automation "
@@ -949,6 +976,7 @@ EXPANDED_SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
     },
     {
         "domain": "git_internals",
+        # Teaches: "git stash create" plus "store" to snapshot changes without touching the shared stash reflog. Rejected: plain "git stash"/"pop" that races other agents.
         "id_suffix": "GIT_WORKTREE_STASH_INTERNALS_0005",
         "prompt": (
             "Explain how an automation agent isolates unstaged modifications in a worktree by generating "
@@ -975,6 +1003,7 @@ EXPANDED_SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
     },
     {
         "domain": "git_internals",
+        # Teaches: "git bisect run" inside a detached worktree so the main checkout is untouched. Rejected: bisect in the primary checkout.
         "id_suffix": "GIT_WORKTREE_DETACHED_BISECT_0006",
         "prompt": (
             "Demonstrate how to run an automated regression bisect in an isolated detached worktree "
@@ -1001,6 +1030,7 @@ EXPANDED_SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
     },
     {
         "domain": "git_internals",
+        # Teaches: relocating a worktree and running "git worktree repair". Rejected: mv plus sed on .git pointer files.
         "id_suffix": "GIT_WORKTREE_SUBMODULE_REPAIR_0007",
         "prompt": (
             "Author a safe script to relocate a git worktree directory to a new path and invoke "
@@ -1032,6 +1062,7 @@ EXPANDED_SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
     },
     {
         "domain": "git_internals",
+        # Teaches: "git worktree add --orphan" to stage release docs with no inherited history. Rejected: checkout --orphan and rm -rf in the main tree, wiping local files.
         "id_suffix": "GIT_WORKTREE_ORPHAN_RELEASE_PIPELINE_0008",
         "prompt": (
             "Show how to stage clean documentation and release artifacts on an orphan branch using "
@@ -1074,6 +1105,7 @@ def validate_trajectory_suite(trajectories: List[Dict[str, Any]]) -> Dict[str, A
         dom = ex["domain"]
         domain_counts[dom] = domain_counts.get(dom, 0) + 1
 
+        # (Runs on every record in every domain.)
         # 1. Policy leak check (zero credentials, zero private hosts, zero destructive chosen)
         record = {
             "id": f"TWU_GOLD_{ex['id_suffix']}",
@@ -1086,6 +1118,7 @@ def validate_trajectory_suite(trajectories: List[Dict[str, Any]]) -> Dict[str, A
         if leaks:
             policy_leaks.append({"id": ex["id_suffix"], "leaks": leaks})
 
+        # The prompt and the chosen answer must contain no flash/write operations; "rejected" is allowed to, since it is the bad example.
         # 2. Firmware safety check (0% flash operations)
         if dom == "bios_uefi":
             for text_field in [ex["prompt"], ex["chosen"]]:
@@ -1094,6 +1127,7 @@ def validate_trajectory_suite(trajectories: List[Dict[str, Any]]) -> Dict[str, A
                 except FirmwareSafetyViolation as e:
                     firmware_violations.append({"id": ex["id_suffix"], "error": str(e)})
 
+        # Chosen answers must pass the domain validator. Only the Fedora branch also demands that the REJECTED answer fail its validator.
         # 3. Domain specific validators
         if dom == "bash_posix":
             chosen_res = BashSafetyValidator.validate(ex["chosen"])
@@ -1117,16 +1151,19 @@ def validate_trajectory_suite(trajectories: List[Dict[str, Any]]) -> Dict[str, A
                 if "--nodocs" not in chosen_text:
                     fedora_issues.append({"id": ex["id_suffix"], "issues": ["Missing --nodocs with --installroot"]})
 
+            # This guards against a "rejected" example that is actually fine, which would teach nothing.
             # Verify rejected response fails validator
             rejected_res = FedoraDnf5Validator.validate_command(ex["rejected"])
             if rejected_res["valid"]:
                 fedora_issues.append({"id": ex["id_suffix"], "issues": ["Rejected response unexpectedly passed validation"]})
 
+    # Corpus-level check: prompt uniqueness (raw and structural "skeleton" ratio, default min 0.90) and policy-leak scan.
     # 4. Fleet deduplication audit
     dedup_report = FleetDedupEngine.audit_corpus(
         [{"prompt": t["prompt"], "chosen": t["chosen"]} for t in trajectories]
     )
 
+    # Every category must be empty and the dedup gate must pass; one failure blocks the build.
     all_passed = (
         len(bash_issues) == 0
         and len(arch_issues) == 0
@@ -1167,6 +1204,7 @@ def compile_and_write_corpus() -> Tuple[int, str, Dict[str, int]]:
     for ex in all_trajectories:
         dom = ex["domain"]
         domain_counts[dom] = domain_counts.get(dom, 0) + 1
+        # All rows are exported as DPO pairs; quality "gold_certified" marks them as validator-approved golden trajectories.
         pair = TrainingPair(
             id=f"TWU_GOLD_{ex['id_suffix']}",
             domain=dom,
@@ -1178,6 +1216,7 @@ def compile_and_write_corpus() -> Tuple[int, str, Dict[str, int]]:
             capabilities=ex["capabilities"],
             created_at=now,
         )
+        # sort_keys gives byte-stable output for the checksum.
         lines.append(json.dumps(pair.to_dict(), sort_keys=True))
 
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)

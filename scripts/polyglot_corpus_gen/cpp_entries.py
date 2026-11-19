@@ -4,11 +4,24 @@ All chosen/completion programs are compilable with clang++ -std=c++17 -Wall -Wex
 
 from datetime import datetime, timezone
 
+# Single timestamp shared by all records in this module; evaluated at import time.
 NOW = datetime.now(timezone.utc).isoformat()
 
+# Record schema (shared by every *_entries.py file):
+#   id / domain / kind  - unique TWU_POLY_<LANG>_<KIND>_NNNN id, language tag, and "sft" or "dpo".
+#   prompt              - the instruction a model is trained to answer.
+#   completion          - (sft) a full, runnable reference program that self-tests with assertions.
+#   chosen / rejected   - (dpo) a correct program vs. a plausible but flawed one for the same prompt.
+#   rejection_reason    - (dpo) the concrete defect in "rejected", so the preference signal is explicit.
+#   capabilities        - skill tags used to balance and filter the corpus.
+#   quality             - "execution_verified": the code was compiled and run before being committed.
+#   created_at          - module import time (NOW), not a per-record authoring time.
+# The code bodies are raw strings (r"""...""") so backslashes and escapes in the target language survive intact.
+# SFT entries 1-6 teach whole-program patterns; DPO entries 1-6 teach one specific pitfall each.
 CPP_ENTRIES = [
     # ------------------ SFT 001 ------------------
     {
+        # Teaches: generic bounded blocking queue: mutex, condition variable, unique_lock, graceful shutdown.
         "id": "TWU_POLY_CPP_SFT_0001",
         "domain": "cpp",
         "kind": "sft",
@@ -111,6 +124,7 @@ int main() {
     },
     # ------------------ SFT 002 ------------------
     {
+        # Teaches: move-only RAII buffer following the Rule of Five (no double free, no leak).
         "id": "TWU_POLY_CPP_SFT_0002",
         "domain": "cpp",
         "kind": "sft",
@@ -212,6 +226,7 @@ int main() {
     },
     # ------------------ SFT 003 ------------------
     {
+        # Teaches: lock-free SPSC ring: atomics with acquire/release ordering and cacheline padding.
         "id": "TWU_POLY_CPP_SFT_0003",
         "domain": "cpp",
         "kind": "sft",
@@ -296,6 +311,7 @@ int main() {
     },
     # ------------------ SFT 004 ------------------
     {
+        # Teaches: non-owning ArraySpan<T> with bounds-checked indexing and subspan.
         "id": "TWU_POLY_CPP_SFT_0004",
         "domain": "cpp",
         "kind": "sft",
@@ -384,6 +400,7 @@ int main() {
     },
     # ------------------ SFT 005 ------------------
     {
+        # Teaches: ThreadPool returning std::future, joins all workers on shutdown.
         "id": "TWU_POLY_CPP_SFT_0005",
         "domain": "cpp",
         "kind": "sft",
@@ -492,6 +509,7 @@ int main() {
     },
     # ------------------ SFT 006 ------------------
     {
+        # Teaches: thread-safe LRU cache: shared_mutex, list plus unordered_map, eviction.
         "id": "TWU_POLY_CPP_SFT_0006",
         "domain": "cpp",
         "kind": "sft",
@@ -579,6 +597,7 @@ int main() {
     },
     # ------------------ DPO 001 ------------------
     {
+        # Preference pair. Chosen: correct version. Rejected: erase(it) in a loop without using the returned iterator (iterator invalidation).
         "id": "TWU_POLY_CPP_DPO_0001",
         "domain": "cpp",
         "kind": "dpo",
@@ -624,6 +643,7 @@ void buggy_remove_evens(std::vector<int>& vec) {
     },
     # ------------------ DPO 002 ------------------
     {
+        # Preference pair. Chosen: correct version. Rejected: locking several mutexes in caller-dependent order (circular-wait deadlock); chosen uses a deadlock-avoiding acquire.
         "id": "TWU_POLY_CPP_DPO_0002",
         "domain": "cpp",
         "kind": "dpo",
@@ -699,6 +719,7 @@ public:
     },
     # ------------------ DPO 003 ------------------
     {
+        # Preference pair. Chosen: correct version. Rejected: parent/child shared_ptr cycle that leaks; chosen uses weak_ptr for the back-link.
         "id": "TWU_POLY_CPP_DPO_0003",
         "domain": "cpp",
         "kind": "dpo",
@@ -762,6 +783,7 @@ void create_cycle() {
     },
     # ------------------ DPO 004 ------------------
     {
+        # Preference pair. Chosen: correct version. Rejected: double-checked locking on a plain raw pointer (data race on the C++ memory model).
         "id": "TWU_POLY_CPP_DPO_0004",
         "domain": "cpp",
         "kind": "dpo",
@@ -828,6 +850,7 @@ UnsafeSingleton* UnsafeSingleton::instance_ = nullptr;
     },
     # ------------------ DPO 005 ------------------
     {
+        # Preference pair. Chosen: correct version. Rejected: returns a string_view to a destroyed temporary string (dangling).
         "id": "TWU_POLY_CPP_DPO_0005",
         "domain": "cpp",
         "kind": "dpo",
@@ -866,6 +889,7 @@ std::string_view broken_greeting(const std::string& name) {
     },
     # ------------------ DPO 006 ------------------
     {
+        # Preference pair. Chosen: correct version. Rejected: matrix indexing with no row/column bounds check (out-of-bounds heap access).
         "id": "TWU_POLY_CPP_DPO_0006",
         "domain": "cpp",
         "kind": "dpo",

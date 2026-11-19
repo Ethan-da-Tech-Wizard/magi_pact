@@ -17,30 +17,46 @@ from typing import Dict, List, Optional, Tuple, Any
 
 @dataclass
 class ToolchainInfo:
+    """What detect_toolchains() learned about one language toolchain on this host."""
+    # Short key used throughout: "c", "cpp", "rust", "go", "csharp".
     language: str
+    # Absolute path of the binary found on PATH, or "none" when absent.
     compiler: str
+    # First line of the tool's version output; "unknown" if the probe failed, "not installed" if absent.
     version: str
+    # False means callers must skip/fail gracefully instead of invoking the tool.
     available: bool
+    # Default arguments the runner passes (warnings, language standard, optimization).
     flags: List[str]
 
 @dataclass
 class VerificationReceipt:
+    """Reproducible record of one build+run attempt (hash of source, outcome, timing, output)."""
     test_id: str
     language: str
+    # Hash of the exact source text, so a receipt can be tied back to its input.
     source_sha256: str
+    # compilation_passed False => execution never happened (execution_passed is False too).
     compilation_passed: bool
     execution_passed: bool
+    # Compiler exit code on build failure, program exit code otherwise; -1 means toolchain missing.
     exit_code: int
     duration_ms: float
     stdout: str
     stderr: str
+    # UTC, ISO-8601 with a literal "Z" suffix.
     timestamp: str
 
 def detect_toolchains() -> Dict[str, ToolchainInfo]:
     """Detect available compilers and interpreters on the local host."""
+    # Each block below follows the same pattern: locate the binary with shutil.which,
+    # ask it for its version (failure to do so is not fatal), and record the
+    # default flags; a missing tool yields an available=False placeholder entry
+    # so every language key is always present in the result.
     toolchains = {}
 
     # C Compiler (gcc / clang / cc)
+    # Preference order is gcc, then clang, then the generic cc alias.
     cc = shutil.which("gcc") or shutil.which("clang") or shutil.which("cc")
     if cc:
         try:
@@ -52,6 +68,7 @@ def detect_toolchains() -> Dict[str, ToolchainInfo]:
         toolchains["c"] = ToolchainInfo("c", "none", "not installed", False, [])
 
     # C++ Compiler (g++ / clang++)
+    # Same preference order for C++.
     cxx = shutil.which("g++") or shutil.which("clang++") or shutil.which("c++")
     if cxx:
         try:
@@ -63,6 +80,7 @@ def detect_toolchains() -> Dict[str, ToolchainInfo]:
         toolchains["cpp"] = ToolchainInfo("cpp", "none", "not installed", False, [])
 
     # Rust (rustc / cargo)
+    # Only rustc is probed (cargo is not used); flags are rustc flags.
     rustc = shutil.which("rustc")
     if rustc:
         try:
@@ -74,6 +92,7 @@ def detect_toolchains() -> Dict[str, ToolchainInfo]:
         toolchains["rust"] = ToolchainInfo("rust", "none", "not installed", False, [])
 
     # Go (go)
+    # For Go the single flag "test" is the subcommand, not a compiler option.
     go = shutil.which("go")
     if go:
         try:
@@ -85,6 +104,7 @@ def detect_toolchains() -> Dict[str, ToolchainInfo]:
         toolchains["go"] = ToolchainInfo("go", "none", "not installed", False, [])
 
     # C# (.NET)
+    # For C# the flag "build" is the dotnet subcommand.
     dotnet = shutil.which("dotnet")
     if dotnet:
         try:
@@ -101,17 +121,23 @@ class IsolatedSandboxRunner:
     """Executes sandboxed compilations and tests in isolated scratch environments."""
 
     def __init__(self, workspace_root: Optional[Path] = None):
+        """Pick the workspace (default: repo root, two levels above this file) and ensure data/sandbox_scratch exists."""
         self.workspace_root = workspace_root or Path(__file__).resolve().parent.parent
         self.scratch_dir = self.workspace_root / "data" / "sandbox_scratch"
+        # Every run builds inside a throwaway TemporaryDirectory under scratch_dir, so
+        # compiled artifacts never touch the source tree and are deleted on exit.
         self.scratch_dir.mkdir(parents=True, exist_ok=True)
 
     def run_c_test(self, test_id: str, c_source: str) -> VerificationReceipt:
         """Compiles and runs a self-testing C snippet."""
+        # Hash the source up front so even failure receipts identify their input.
         src_sha = hashlib.sha256(c_source.encode("utf-8")).hexdigest()
+        # Wall-clock start; duration covers compile + run.
         t0 = time.time()
         toolchains = detect_toolchains()
         cc_info = toolchains.get("c")
 
+        # Toolchain absent: return a failure receipt (exit_code -1, duration 0) instead of raising.
         if not cc_info or not cc_info.available:
             return VerificationReceipt(
                 test_id=test_id, language="c", source_sha256=src_sha,
@@ -126,6 +152,8 @@ class IsolatedSandboxRunner:
             bin_file = Path(tmp_dir) / "test_bin"
             src_file.write_text(c_source, encoding="utf-8")
 
+            # Build step. A non-zero compiler exit short-circuits with the compiler's own
+            # stdout/stderr and its exit code so diagnostics reach the receipt.
             # Compile
             cmd_compile = [cc_info.compiler] + cc_info.flags + ["-o", str(bin_file), str(src_file)]
             res_comp = subprocess.run(cmd_compile, capture_output=True, text=True)
@@ -139,6 +167,8 @@ class IsolatedSandboxRunner:
                     timestamp=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
                 )
 
+            # Run step. The 10 s timeout bounds runaway tests; note that subprocess.run
+            # raises TimeoutExpired in that case (it is not caught here).
             # Execute
             res_exec = subprocess.run([str(bin_file)], capture_output=True, text=True, timeout=10)
             duration_ms = (time.time() - t0) * 1000
@@ -152,11 +182,14 @@ class IsolatedSandboxRunner:
 
     def run_cpp_test(self, test_id: str, cpp_source: str) -> VerificationReceipt:
         """Compiles and runs a self-testing C++ snippet."""
+        # Hash the source up front so even failure receipts identify their input.
         src_sha = hashlib.sha256(cpp_source.encode("utf-8")).hexdigest()
+        # Wall-clock start; duration covers compile + run.
         t0 = time.time()
         toolchains = detect_toolchains()
         cxx_info = toolchains.get("cpp")
 
+        # Toolchain absent: return a failure receipt (exit_code -1, duration 0) instead of raising.
         if not cxx_info or not cxx_info.available:
             return VerificationReceipt(
                 test_id=test_id, language="cpp", source_sha256=src_sha,
@@ -171,6 +204,8 @@ class IsolatedSandboxRunner:
             bin_file = Path(tmp_dir) / "test_bin"
             src_file.write_text(cpp_source, encoding="utf-8")
 
+            # Build step. A non-zero compiler exit short-circuits with the compiler's own
+            # stdout/stderr and its exit code so diagnostics reach the receipt.
             # Compile
             cmd_compile = [cxx_info.compiler] + cxx_info.flags + ["-o", str(bin_file), str(src_file)]
             res_comp = subprocess.run(cmd_compile, capture_output=True, text=True)
@@ -184,6 +219,8 @@ class IsolatedSandboxRunner:
                     timestamp=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
                 )
 
+            # Run step. The 10 s timeout bounds runaway tests; note that subprocess.run
+            # raises TimeoutExpired in that case (it is not caught here).
             # Execute
             res_exec = subprocess.run([str(bin_file)], capture_output=True, text=True, timeout=10)
             duration_ms = (time.time() - t0) * 1000
@@ -197,11 +234,14 @@ class IsolatedSandboxRunner:
 
     def run_rust_test(self, test_id: str, rust_source: str) -> VerificationReceipt:
         """Compiles and runs a self-testing Rust snippet."""
+        # Hash the source up front so even failure receipts identify their input.
         src_sha = hashlib.sha256(rust_source.encode("utf-8")).hexdigest()
+        # Wall-clock start; duration covers compile + run.
         t0 = time.time()
         toolchains = detect_toolchains()
         rust_info = toolchains.get("rust")
 
+        # Toolchain absent: return a failure receipt (exit_code -1, duration 0) instead of raising.
         if not rust_info or not rust_info.available:
             return VerificationReceipt(
                 test_id=test_id, language="rust", source_sha256=src_sha,
@@ -216,7 +256,10 @@ class IsolatedSandboxRunner:
             bin_file = Path(tmp_dir) / "test_bin"
             src_file.write_text(rust_source, encoding="utf-8")
 
+            # Build step. A non-zero compiler exit short-circuits with the compiler's own
+            # stdout/stderr and its exit code so diagnostics reach the receipt.
             # Compile
+            # "--test" makes rustc build a test-harness binary (runs #[test] fns) rather than a normal executable.
             cmd_compile = [rust_info.compiler] + rust_info.flags + ["--test", "-o", str(bin_file), str(src_file)]
             res_comp = subprocess.run(cmd_compile, capture_output=True, text=True)
             if res_comp.returncode != 0:
@@ -229,6 +272,8 @@ class IsolatedSandboxRunner:
                     timestamp=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
                 )
 
+            # Run step. The 10 s timeout bounds runaway tests; note that subprocess.run
+            # raises TimeoutExpired in that case (it is not caught here).
             # Execute
             res_exec = subprocess.run([str(bin_file)], capture_output=True, text=True, timeout=10)
             duration_ms = (time.time() - t0) * 1000

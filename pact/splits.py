@@ -54,6 +54,8 @@ preventing artificial benchmark inflation and data leakage.
 # ------------------------------------------------------------------------------
 # Standard Library Imports
 # ------------------------------------------------------------------------------
+# Stdlib only. `os` and `re` are imported but not used by this module; and
+# `field` / `asdict` are likewise unused. Left in place (comments-only change).
 from dataclasses import dataclass, field, asdict  # Structured class containers
 from datetime import datetime, timezone          # UTC ISO timestamping
 import hashlib                                    # SHA-256 integrity verification
@@ -67,12 +69,17 @@ from typing import Dict, List, Optional, Set, Tuple, Any  # Type annotations
 # Constants and Qwen3.5 ChatML Special Tokens
 # ------------------------------------------------------------------------------
 # Canonical system prompt establishing domain expertise and coding standards
+# Single shared system prompt: it is masked from the loss, so its wording only
+# conditions the model and never becomes a training target.
 DEFAULT_SYSTEM_PROMPT: str = (
     "You are a helpful, expert AI assistant specializing in systems programming, "
     "software engineering, and multi-language development."
 )
 
 # Special control tokens for Qwen / ChatML formatting
+# Qwen ChatML framing: "<|im_start|>{role}\n{content}<|im_end|>\n". The
+# assistant span (the only part trained on) includes its closing <|im_end|>
+# so the model learns to stop.
 IM_START: str = "<|im_start|>"  # Signals beginning of a conversational role turn
 IM_END: str = "<|im_end|>"      # Signals termination of a conversational role turn
 
@@ -106,10 +113,16 @@ class QwenChatMLFormatter:
             4. Compute character offsets for assistant start (`asst_start`) and end (`asst_end`).
             5. Attach loss mask metadata with span bounds and return updated dictionary.
         """
+        # Spans are CHARACTER offsets into `text`, not token ids; a trainer must map
+        # them to token positions with its own tokenizer's offset mapping.
         prompt = record.get("prompt", "").strip()
+        # Accepts either 'completion' or, failing that, 'chosen' (so DPO rows can be
+        # reused as SFT data).
         completion = record.get("completion") or record.get("chosen", "")
         completion = completion.strip()
 
+        # Assistant text sits at [asst_start, asst_end): everything after the
+        # "<|im_start|>assistant\n" prefix up to and including <|im_end|>.
         # Build raw ChatML turn segments
         sys_part = f"{IM_START}system\n{system_prompt}{IM_END}\n"
         user_part = f"{IM_START}user\n{prompt}{IM_END}\n"
@@ -145,6 +158,8 @@ class QwenChatMLFormatter:
             ],
         }
 
+        # Copy first so every original field (id, domain, kind, ...) is preserved and
+        # the caller's record is not mutated.
         formatted = dict(record)
         formatted["messages"] = messages
         formatted["text"] = full_text
@@ -173,6 +188,8 @@ class QwenChatMLFormatter:
             4. Compute assistant token span boundaries for both chosen and rejected variants.
             5. Assemble dual message arrays and attach preference loss masking metadata.
         """
+        # Both chosen and rejected share the same system+user prefix, so their
+        # assistant spans start at the same character offset.
         prompt = record.get("prompt", "").strip()
         chosen = record.get("chosen", "").strip()
         rejected = record.get("rejected", "").strip()
@@ -193,6 +210,8 @@ class QwenChatMLFormatter:
         r_start = len(sys_part) + len(user_part) + len(asst_prefix)
         r_end = len(text_rejected)
 
+        # Both tracks keep loss=True on the assistant turn; DPO uses the pair
+        # contrastively, so the "rejected" track is not an SFT target by itself.
         chosen_messages = [
             {"role": "system", "content": system_prompt, "loss": False},
             {"role": "user", "content": prompt, "loss": False},
@@ -204,6 +223,8 @@ class QwenChatMLFormatter:
             {"role": "assistant", "content": rejected, "loss": True},
         ]
 
+        # The generic "assistant_spans" key mirrors the chosen span so consumers that
+        # only understand the SFT schema still read the preferred answer.
         loss_mask_metadata = {
             "template": "qwen3.5_chatml",
             "assistant_only_loss": True,
@@ -235,6 +256,7 @@ class QwenChatMLFormatter:
             ],
         }
 
+        # "messages"/"text" alias the chosen track for the same compatibility reason.
         formatted = dict(record)
         formatted["messages"] = chosen_messages
         formatted["chosen_messages"] = chosen_messages
@@ -271,6 +293,9 @@ class QwenChatMLFormatter:
             6. Store span in `assistant_spans` list tagged with turn number.
             7. Set difficulty and benchmark tags, return completed record.
         """
+        # Multi-turn layout: one system turn, then (user, assistant) pairs. Each
+        # assistant turn gets its own span tagged with a 1-based turn number; user and
+        # system turns carry no loss.
         full_text = f"{IM_START}system\n{system_prompt}{IM_END}\n"
         messages = [{"role": "system", "content": system_prompt, "loss": False}]
         assistant_spans = []
@@ -287,6 +312,8 @@ class QwenChatMLFormatter:
             a_prefix = f"{IM_START}assistant\n"
             full_text += u_part + a_prefix
 
+            # Offsets are taken AFTER the assistant prefix is appended, so they cover only
+            # the answer text and its <|im_end|>; the extra "\n" separator is excluded.
             start_span = len(full_text)
             a_body = f"{a_content}{IM_END}"
             full_text += a_body + "\n"
@@ -318,13 +345,20 @@ class QwenChatMLFormatter:
         formatted["num_turns"] = len(turns)
         formatted["turns"] = formatted_turns
         formatted["messages"] = messages
+        # Strip the trailing newline from the last turn; span offsets stay valid
+        # because they all lie before that final character.
         formatted["text"] = full_text.rstrip("\n")
         formatted["loss_mask_metadata"] = loss_mask_metadata
+        # Eval rows are always tagged hard/multi-turn so downstream reports can filter them.
         formatted["difficulty"] = "hard"
         formatted["benchmark_type"] = "multi_turn_systems_polyglot"
         return formatted
 
 
+# Held-out evaluation conversations, keyed by the id of a record that must
+# exist in the corpus (partition_records raises KeyError otherwise). Each value
+# is a list of {user, assistant} turns; the code inside the strings is
+# benchmark data and must stay byte-exact. These ids are removed from training.
 # Exemplar multi-turn conversational structures for hard benchmark evaluation
 HARD_MULTITURN_BENCHMARKS: Dict[str, List[Dict[str, str]]] = {
     # 1. C: MPMC Bounded Integer Queue
@@ -1143,6 +1177,9 @@ HARD_MULTITURN_BENCHMARKS: Dict[str, List[Dict[str, str]]] = {
 }
 
 
+# Fixed, hand-picked dev ids (roughly one per language/family) rather than a
+# random sample: the split is therefore reproducible and reviewable, but it
+# only works for a corpus that contains these exact ids.
 # Candidate IDs explicitly partitioned for dev (~15% held out by task family)
 DEV_SPLIT_IDS: Set[str] = {
     # 6 Polyglot SFT
@@ -1170,6 +1207,8 @@ DEV_SPLIT_IDS: Set[str] = {
     "TWU_GOLD_WEB_TS_DISCRIMINATED_0009",
 }
 
+# The eval ids are derived from the benchmark dict, so adding a benchmark
+# automatically holds its record out of training.
 # Candidate IDs explicitly partitioned for hard multi-turn eval
 EVAL_HELDOUT_IDS: Set[str] = set(HARD_MULTITURN_BENCHMARKS.keys())
 
@@ -1215,6 +1254,7 @@ class DatasetSplitter:
         Inputs:
             root_dir (Optional[Path]): Filesystem path to repository root.
         """
+        # Default root is the repo root (two levels above this file).
         self.root_dir: Path = root_dir or Path(__file__).resolve().parent.parent
 
     def load_corpus(self, corpus_path: Optional[Path] = None) -> List[Dict[str, Any]]:
@@ -1237,12 +1277,14 @@ class DatasetSplitter:
             4. Safely decode each line with `json.loads`; raise ValueError on syntax errors.
             5. Return list of valid records.
         """
+        # Default location of the consolidated corpus produced by the exchange pipeline.
         path = corpus_path or (self.root_dir / "exchange" / "consolidated" / "golden_master_corpus.jsonl")
         if not path.exists():
             raise FileNotFoundError(f"Corpus file not found: {path}")
 
         records: List[Dict[str, Any]] = []
         with open(path, "r", encoding="utf-8") as f:
+            # Line numbers are 1-based so error messages point at the right line of the file.
             for line_no, line in enumerate(f, 1):
                 line = line.strip()
                 if line:
@@ -1280,7 +1322,9 @@ class DatasetSplitter:
             7. Calculate `dev_ratio` and assemble comprehensive manifest dictionary.
             8. Return assembled `SplitResult`.
         """
+        # Pipeline order: eval first, then dev, then everything else is training.
         total = len(records)
+        # Duplicate ids in the corpus would silently collapse here (last one wins).
         record_map = {r["id"]: r for r in records}
 
         # 1. Held-out Evaluation Split (Multi-Turn systems benchmarks)
@@ -1299,6 +1343,9 @@ class DatasetSplitter:
             if rid not in record_map:
                 raise KeyError(f"Expected dev ID {rid} missing from ingested corpus")
             raw_rec = record_map[rid]
+            # Note: in the dev split any kind other than "sft" is formatted as DPO, whereas
+            # the training loop below sends unknown kinds to SFT. Both are fine for the
+            # known kinds ("sft"/"dpo"); the difference only matters for unexpected values.
             if raw_rec.get("kind") == "sft":
                 formatted = QwenChatMLFormatter.format_sft_record(raw_rec, system_prompt)
             else:
@@ -1306,6 +1353,9 @@ class DatasetSplitter:
             dev.append(formatted)
 
         # 3. Training Sets (Disjoint from Dev and Eval)
+        # Training set = everything not reserved for dev or eval, so the splits are
+        # disjoint by id by construction; the contamination check below also
+        # verifies disjointness by prompt text.
         held_out_ids = EVAL_HELDOUT_IDS | DEV_SPLIT_IDS
         train_raw = [r for r in records if r["id"] not in held_out_ids]
 
@@ -1319,18 +1369,23 @@ class DatasetSplitter:
             elif kind == "dpo":
                 dpo_train.append(QwenChatMLFormatter.format_dpo_record(r, system_prompt))
             else:
+                # Unknown kinds are treated as SFT rather than dropped.
                 # Default fallback
                 sft_train.append(QwenChatMLFormatter.format_sft_record(r, system_prompt))
 
+        # Id-sorted output makes files (and their checksums) independent of corpus order.
         # Sort for determinism across environments
         sft_train.sort(key=lambda x: x["id"])
         dpo_train.sort(key=lambda x: x["id"])
         dev.sort(key=lambda x: x["id"])
         eval_heldout.sort(key=lambda x: x["id"])
 
+        # Raises AssertionError rather than returning a flag, so a leaky split can
+        # never be written out by accident.
         # Strict cross-split contamination verification
         self.verify_zero_cross_split_contamination(sft_train, dpo_train, dev, eval_heldout)
 
+        # Guard against division by zero for an empty corpus.
         dev_ratio = len(dev) / total if total > 0 else 0.0
 
         # Build Manifest & Statistics
@@ -1343,6 +1398,7 @@ class DatasetSplitter:
             dev_ratio=dev_ratio,
         )
 
+        # checksums stay empty until write_splits() hashes the files.
         return SplitResult(
             sft_train=sft_train,
             dpo_train=dpo_train,
@@ -1388,6 +1444,9 @@ class DatasetSplitter:
             3. If any intersection contains elements, raise AssertionError.
             4. Verify disjointness of record IDs across splits.
         """
+        # Comparison is on the stripped prompt text, i.e. exact-match leakage only; it
+        # does not detect paraphrases or near-duplicates. Note a prompt shared by an
+        # SFT and a DPO train row is fine (both are train).
         train_prompts: Set[str] = {r["prompt"].strip() for r in sft_train} | {r["prompt"].strip() for r in dpo_train}
         dev_prompts: Set[str] = {r["prompt"].strip() for r in dev}
         eval_prompts: Set[str] = {r["prompt"].strip() for r in eval_heldout}
@@ -1405,6 +1464,7 @@ class DatasetSplitter:
         if dev_eval_overlap:
             raise AssertionError(f"Cross-split contamination between DEV and EVAL: {dev_eval_overlap}")
 
+        # Second layer: even with distinct prompts, one id must not appear in two splits.
         # ID disjointness check
         train_ids = {r["id"] for r in sft_train} | {r["id"] for r in dpo_train}
         dev_ids = {r["id"] for r in dev}
@@ -1442,6 +1502,7 @@ class DatasetSplitter:
             3. Assemble metadata dictionary specifying paths, row counts, and zero-contamination certification.
             4. Return manifest dictionary.
         """
+        # Small local helpers: tallies sorted by key so the manifest is stable.
         def domain_counts(rows: List[Dict[str, Any]]) -> Dict[str, int]:
             counts: Dict[str, int] = {}
             for r in rows:
@@ -1456,18 +1517,25 @@ class DatasetSplitter:
                 counts[k] = counts.get(k, 0) + 1
             return dict(sorted(counts.items()))
 
+        # Distinct, non-empty domains across all four splits.
         all_domains = sorted(list({
             r.get("domain", "")
             for r in (sft_train + dpo_train + dev + eval_heldout)
             if r.get("domain")
         }))
 
+        # Caution: source_sha256 and the zero overlap counters below are hard-coded
+        # literals, not computed here. The overlap zeros are justified because
+        # verify_zero_cross_split_contamination() would already have raised; the source
+        # hash only matches a specific version of the golden master corpus and is not
+        # recomputed from the file that was actually loaded.
         return {
             "source_corpus": "exchange/consolidated/golden_master_corpus.jsonl",
             "source_sha256": "546cbee696142c5ec44385a86115c1b99a9e4bd61571de7c47eb23454d5e63f8",
             "source_total_rows": total_records,
             "chat_template": "qwen3.5_chatml",
             "assistant_only_loss_masking": True,
+            # Wall-clock timestamp: the only non-deterministic field in the manifest.
             "created_at": datetime.now(timezone.utc).isoformat(),
             "splits": {
                 "sft_train": {
@@ -1531,9 +1599,12 @@ class DatasetSplitter:
             5. Generate and write `CHECKSUMS.sha256` digest file.
             6. Store checksums in `split_result.checksums` and return dictionary.
         """
+        # Default output location is data/datasets/ under the repo root.
         out_dir = output_dir or (self.root_dir / "data" / "datasets")
         out_dir.mkdir(parents=True, exist_ok=True)
 
+        # Filename -> rows. The filename stem is later used as the key into
+        # manifest["splits"], so these names must match the manifest keys.
         files_to_write = {
             "sft_train.jsonl": split_result.sft_train,
             "dpo_train.jsonl": split_result.dpo_train,
@@ -1543,6 +1614,8 @@ class DatasetSplitter:
 
         checksums: Dict[str, str] = {}
 
+        # ensure_ascii=False keeps non-ASCII text readable in the files instead of
+        # \uXXXX escapes.
         # 1. Write the 4 dataset splits
         for filename, rows in files_to_write.items():
             filepath = out_dir / filename
@@ -1550,12 +1623,15 @@ class DatasetSplitter:
                 for row in rows:
                     f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
+            # Hash the bytes actually on disk and store the digest back into the manifest
+            # BEFORE the manifest itself is written, so it records each split's hash.
             # Compute sha256
             sha = hashlib.sha256(filepath.read_bytes()).hexdigest()
             checksums[filename] = sha
             split_key = filename.replace(".jsonl", "")
             split_result.manifest["splits"][split_key]["sha256"] = sha
 
+        # The manifest cannot contain its own hash, so it is listed only in CHECKSUMS.sha256.
         # 2. Write split_manifest.json
         manifest_path = out_dir / "split_manifest.json"
         manifest_text = json.dumps(split_result.manifest, indent=2, ensure_ascii=False) + "\n"
@@ -1563,6 +1639,7 @@ class DatasetSplitter:
         manifest_sha = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
         checksums["split_manifest.json"] = manifest_sha
 
+        # "<hash>  <name>" two-space format is what `sha256sum -c` expects.
         # 3. Write CHECKSUMS.sha256
         checksum_path = out_dir / "CHECKSUMS.sha256"
         checksum_lines = []

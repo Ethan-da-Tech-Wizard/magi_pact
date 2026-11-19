@@ -30,6 +30,7 @@ import sys
 from typing import Dict, Any
 
 # Ensure workspace root is in sys.path
+# Make the repo root importable so "pact.splits" resolves when run as a script.
 SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT_DIR = SCRIPT_DIR.parent
 if str(ROOT_DIR) not in sys.path:
@@ -42,10 +43,12 @@ from pact.splits import (
 
 
 def main():
+    """CLI entry point: split the golden-master corpus into SFT/DPO/dev/eval files, or just verify existing checksums."""
     parser = argparse.ArgumentParser(
         description="Format and partition golden master corpus into canonical LoRA dataset splits."
     )
     parser.add_argument(
+        # Two spellings (--corpus / --input) for the same option, kept for caller compatibility.
         "--corpus",
         "--input",
         type=Path,
@@ -73,6 +76,7 @@ def main():
 
     splitter = DatasetSplitter(root_dir=ROOT_DIR)
 
+    # Verify-only mode: re-hash existing split files against CHECKSUMS.sha256 and exit 0/1 without rewriting anything.
     if args.verify_only:
         checksum_file = args.out_dir / "CHECKSUMS.sha256"
         if not checksum_file.exists():
@@ -84,6 +88,7 @@ def main():
             for line in f:
                 line = line.strip()
                 if line:
+                    # sha256sum format: "<hex digest>  <filename>"; split on first whitespace run only.
                     exp_sha, fname = line.split(None, 1)
                     target_file = args.out_dir / fname
                     if not target_file.exists():
@@ -108,6 +113,8 @@ def main():
     print("-" * 76)
 
     # Ingest
+    # All the real work (chat formatting, family-based dev holdout, contamination check, writing files) is in pact.splits.DatasetSplitter;
+    # this script only wires up the CLI and prints the report.
     records = splitter.load_corpus(args.corpus)
     print(f"Ingested {len(records)} records from {args.corpus.name}.")
 
@@ -132,6 +139,8 @@ def main():
 
     print("-" * 76)
     print(f"Total Partitioned Rows : {res.manifest['total_split_rows']} (Input: {res.total_records})")
+    # Note: the ratio, family count and contamination flag are computed, but the "~15%", "13 families"
+    # and "0 prompts" wording in these lines is fixed text, not measured.
     print(f"Dev Split Ratio        : {res.dev_ratio:.2%} (~15% held out across 13 task families)")
     print(f"Task Families Covered  : {res.manifest['task_families_count']}/13 (100% full coverage)")
     print(f"Cross-Split Overlap    : 0 prompts (0 exact prompt overlaps between train and dev/eval)")

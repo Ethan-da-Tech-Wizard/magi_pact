@@ -4,11 +4,24 @@ All chosen/completion programs are self-contained Go programs with self-testing 
 
 from datetime import datetime, timezone
 
+# Single timestamp shared by all records in this module; evaluated at import time.
 NOW = datetime.now(timezone.utc).isoformat()
 
+# Record schema (shared by every *_entries.py file):
+#   id / domain / kind  - unique TWU_POLY_<LANG>_<KIND>_NNNN id, language tag, and "sft" or "dpo".
+#   prompt              - the instruction a model is trained to answer.
+#   completion          - (sft) a full, runnable reference program that self-tests with assertions.
+#   chosen / rejected   - (dpo) a correct program vs. a plausible but flawed one for the same prompt.
+#   rejection_reason    - (dpo) the concrete defect in "rejected", so the preference signal is explicit.
+#   capabilities        - skill tags used to balance and filter the corpus.
+#   quality             - "execution_verified": the code was compiled and run before being committed.
+#   created_at          - module import time (NOW), not a per-record authoring time.
+# The code bodies are raw strings (r"""...""") so backslashes and escapes in the target language survive intact.
+# SFT entries 1-6 teach whole-program patterns; DPO entries 1-6 teach one specific pitfall each.
 GO_ENTRIES = [
     # ------------------ SFT 001 ------------------
     {
+        # Teaches: bounded worker pool with context timeout cancellation and sync.WaitGroup.
         "id": "TWU_POLY_GO_SFT_0001",
         "domain": "go",
         "kind": "sft",
@@ -104,6 +117,7 @@ func main() {
     },
     # ------------------ SFT 002 ------------------
     {
+        # Teaches: sharded concurrent map: 32 FNV-1a shards each guarded by an RWMutex.
         "id": "TWU_POLY_GO_SFT_0002",
         "domain": "go",
         "kind": "sft",
@@ -191,6 +205,7 @@ func main() {
     },
     # ------------------ SFT 003 ------------------
     {
+        # Teaches: lock-free ring buffer using sync/atomic and power-of-two masking.
         "id": "TWU_POLY_GO_SFT_0003",
         "domain": "go",
         "kind": "sft",
@@ -292,6 +307,7 @@ func main() {
     },
     # ------------------ SFT 004 ------------------
     {
+        # Teaches: sync.Pool byte-buffer pool with a capacity cap so oversized buffers are not retained.
         "id": "TWU_POLY_GO_SFT_0004",
         "domain": "go",
         "kind": "sft",
@@ -363,6 +379,7 @@ func main() {
     },
     # ------------------ SFT 005 ------------------
     {
+        # Teaches: token bucket rate limiter with thread-safe refill and non-blocking TryAcquire.
         "id": "TWU_POLY_GO_SFT_0005",
         "domain": "go",
         "kind": "sft",
@@ -439,6 +456,7 @@ func main() {
     },
     # ------------------ SFT 006 ------------------
     {
+        # Teaches: binary packet parser with strict bounds validation and typed errors.
         "id": "TWU_POLY_GO_SFT_0006",
         "domain": "go",
         "kind": "sft",
@@ -519,6 +537,7 @@ func main() {
     },
     # ------------------ DPO 001 ------------------
     {
+        # Preference pair. Chosen: correct version. Rejected: goroutine sends on an unbuffered channel after the receiver timed out (goroutine leak); chosen avoids the leak.
         "id": "TWU_POLY_GO_DPO_0001",
         "domain": "go",
         "kind": "dpo",
@@ -602,6 +621,7 @@ func LeakyQuery(timeout time.Duration) (string, error) {
     },
     # ------------------ DPO 002 ------------------
     {
+        # Preference pair. Chosen: correct version. Rejected: loop variable captured by goroutines (all see the final index).
         "id": "TWU_POLY_GO_DPO_0002",
         "domain": "go",
         "kind": "dpo",
@@ -665,6 +685,7 @@ func BuggyLoop() {
     },
     # ------------------ DPO 003 ------------------
     {
+        # Preference pair. Chosen: correct version. Rejected: unsynchronized concurrent map writes (fatal runtime error).
         "id": "TWU_POLY_GO_DPO_0003",
         "domain": "go",
         "kind": "dpo",
@@ -728,6 +749,7 @@ func FatalMapWrite() {
     },
     # ------------------ DPO 004 ------------------
     {
+        # Preference pair. Chosen: correct version. Rejected: buf[offset:offset+length] with no bounds validation (slice-range panic).
         "id": "TWU_POLY_GO_DPO_0004",
         "domain": "go",
         "kind": "dpo",
@@ -779,6 +801,7 @@ func UnsafeSlice(buf []byte, offset int, length int) []byte {
     },
     # ------------------ DPO 005 ------------------
     {
+        # Preference pair. Chosen: correct version. Rejected: blocking channel send while holding a mutex (lock/channel inversion deadlock).
         "id": "TWU_POLY_GO_DPO_0005",
         "domain": "go",
         "kind": "dpo",
@@ -848,6 +871,7 @@ func (db *DeadlockBroadcaster) BadUpdate(val string) {
     },
     # ------------------ DPO 006 ------------------
     {
+        # Preference pair. Chosen: correct version. Rejected: wg.Add(1) called inside the goroutine, so Wait can return early.
         "id": "TWU_POLY_GO_DPO_0006",
         "domain": "go",
         "kind": "dpo",

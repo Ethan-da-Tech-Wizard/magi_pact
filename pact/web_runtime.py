@@ -7,6 +7,9 @@ Validates and locks in:
 
 Provides structural validation with zero runtime dependencies.
 """
+# Stdlib only. The CSS/HTML/TypeScript samples are stored as strings and are
+# never parsed or executed here; "validation" is substring matching (see
+# validate_web_spec), so this module has no browser, Node or tsc dependency.
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 import hashlib
@@ -16,6 +19,13 @@ from typing import Dict, List, Optional, Tuple, Any
 
 @dataclass
 class WebComponentSpec:
+    """A reference web snippet plus the literal substrings it must contain.
+
+    ``kind`` selects the language ("css", "html" or "typescript"); ``code_snippet``
+    is the gold sample; ``validation_rules`` are the literal fragments that prove
+    the sample demonstrates the feature named in ``title``/``description``.
+    Serialised as-is into exchange/web_specs.jsonl.
+    """
     spec_id: str
     kind: str  # "css" | "html" | "typescript"
     title: str
@@ -23,7 +33,11 @@ class WebComponentSpec:
     validation_rules: List[str]
     description: str
 
+# Twelve gold specs: 4 CSS, 3 HTML, 5 TypeScript/Node. Order is significant:
+# WEB_TRAJECTORIES below indexes this list by position (WEB_SPECS[0] ... [11]),
+# and the export hash depends on it. Snippets are exact data; do not reflow.
 WEB_SPECS: List[WebComponentSpec] = [
+    # CSS 1: grid-template-areas layout with a single-column mobile fallback.
     WebComponentSpec(
         spec_id="CSS-HOLY-GRAIL-01",
         kind="css",
@@ -66,6 +80,7 @@ WEB_SPECS: List[WebComponentSpec] = [
         ],
         description="Responsive 3-column holy grail grid layout using named template areas and mobile stack collapse."
     ),
+    # CSS 2: clamp()-based fluid type scale through custom properties.
     WebComponentSpec(
         spec_id="CSS-FLUID-TYPE-01",
         kind="css",
@@ -100,6 +115,7 @@ WEB_SPECS: List[WebComponentSpec] = [
         ],
         description="Dynamic fluid typography and spacing scale using CSS clamp functions across viewports."
     ),
+    # CSS 3: print stylesheet (hide chrome, avoid breaks, print link URLs).
     WebComponentSpec(
         spec_id="CSS-PRINT-MEDIA-01",
         kind="css",
@@ -156,6 +172,8 @@ WEB_SPECS: List[WebComponentSpec] = [
         ],
         description="Production print media stylesheet guaranteeing ink-conserving high contrast, link disclosure, and pagination."
     ),
+    # CSS 4: cascade layers; :where() adds zero specificity, :is() takes its most
+    # specific argument (the comments inside the snippet say the same).
     WebComponentSpec(
         spec_id="CSS-CASCADE-SPECIFICITY-01",
         kind="css",
@@ -209,6 +227,8 @@ WEB_SPECS: List[WebComponentSpec] = [
         ],
         description="Cascade management using @layer definitions and specificity tuning with :where() and :is()."
     ),
+    # HTML 1: native <dialog>; method="dialog" closes it on submit and the click
+    # handler dismisses it on a backdrop click.
     WebComponentSpec(
         spec_id="HTML-DIALOG-MODAL-01",
         kind="html",
@@ -249,6 +269,7 @@ WEB_SPECS: List[WebComponentSpec] = [
         ],
         description="Accessible modal dialog using HTML5 native <dialog> element and form submission."
     ),
+    # HTML 2: search landmark form with a visually-hidden label for screen readers.
     WebComponentSpec(
         spec_id="HTML-SEARCH-FORM-01",
         kind="html",
@@ -291,6 +312,7 @@ WEB_SPECS: List[WebComponentSpec] = [
         ],
         description="Semantic HTML5 search interface with landmark role, accessible labeling, and search input constraints."
     ),
+    # HTML 3: full landmark skeleton with skip link, nav, breadcrumb and footer.
     WebComponentSpec(
         spec_id="HTML-LANDMARK-NAV-01",
         kind="html",
@@ -361,6 +383,8 @@ WEB_SPECS: List[WebComponentSpec] = [
         ],
         description="Comprehensive accessible landmark skeleton featuring skip navigation, primary nav, breadcrumbs, and main."
     ),
+    # TS 1: `satisfies` checks the object against AgentConfig without widening
+    # its literal types; the discriminated union uses a `never` exhaustiveness check.
     WebComponentSpec(
         spec_id="TS-SATISFIES-CONFIG-01",
         kind="typescript",
@@ -402,6 +426,7 @@ WEB_SPECS: List[WebComponentSpec] = [
         ],
         description="Type-safe configuration with satisfies operator and exhaustive discriminated union matching."
     ),
+    # TS 2: protocol events as a discriminated union with an assertNever helper.
     WebComponentSpec(
         spec_id="TS-DISCRIMINATED-UNION-01",
         kind="typescript",
@@ -450,6 +475,7 @@ WEB_SPECS: List[WebComponentSpec] = [
         ],
         description="Protocol event handling using discriminated unions and unreachable compile-time assertNever branch verification."
     ),
+    # TS 3: generic constraints (extends/keyof), DeepReadonly and const type parameters.
     WebComponentSpec(
         spec_id="TS-GENERIC-CONSTRAINTS-01",
         kind="typescript",
@@ -492,6 +518,8 @@ WEB_SPECS: List[WebComponentSpec] = [
         ],
         description="Type constraints leveraging extends, keyof property indexing, and TypeScript 5.0 const type parameters."
     ),
+    # Node: code that runs under native type stripping, so it avoids TS-only
+    # runtime syntax (enums, namespaces, constructor parameter properties).
     WebComponentSpec(
         spec_id="NODE-NATIVE-TYPE-STRIP-01",
         kind="typescript",
@@ -538,6 +566,7 @@ WEB_SPECS: List[WebComponentSpec] = [
         ],
         description="Node v26 native execution adhering strictly to type stripping syntax constraints without code emission."
     ),
+    # TS 4: fetch wrapper returning a Result type, with a default 5 s AbortSignal timeout.
     WebComponentSpec(
         spec_id="TS-FETCH-ABORT-STREAM-01",
         kind="typescript",
@@ -583,9 +612,15 @@ WEB_SPECS: List[WebComponentSpec] = [
     )
 ]
 
+# Trajectories adapt each spec into a DPO pair: "chosen" is the spec's own
+# snippet (same string object, so the two never drift apart), "rejected" is
+# a deliberately poor version whose flaw is named in a trailing comment inside
+# the sample. The domain here is the dataset domain ("html_css" / "typescript"),
+# which is coarser than WebComponentSpec.kind.
 # Trajectory definitions matching TrainingPair schema for golden master integration
 WEB_TRAJECTORIES: List[Dict[str, Any]] = [
     {
+        # id_suffix becomes the record id TWU_GOLD_<suffix>; spec_id links back to WEB_SPECS.
         "id_suffix": "WEB_CSS_GRID_0001",
         "spec_id": "CSS-HOLY-GRAIL-01",
         "domain": "html_css",
@@ -605,6 +640,7 @@ WEB_TRAJECTORIES: List[Dict[str, Any]] = [
         "validation_rules": WEB_SPECS[0].validation_rules,
         "description": WEB_SPECS[0].description
     },
+    # Pair 2: rejected = stepwise media-query font sizes instead of clamp().
     {
         "id_suffix": "WEB_CSS_FLUID_0002",
         "spec_id": "CSS-FLUID-TYPE-01",
@@ -624,6 +660,7 @@ WEB_TRAJECTORIES: List[Dict[str, Any]] = [
         "validation_rules": WEB_SPECS[1].validation_rules,
         "description": WEB_SPECS[1].description
     },
+    # Pair 3: rejected = print rules that miss page breaks, dark backgrounds and chrome hiding.
     {
         "id_suffix": "WEB_CSS_PRINT_0003",
         "spec_id": "CSS-PRINT-MEDIA-01",
@@ -641,6 +678,7 @@ WEB_TRAJECTORIES: List[Dict[str, Any]] = [
         "validation_rules": WEB_SPECS[2].validation_rules,
         "description": WEB_SPECS[2].description
     },
+    # Pair 4: rejected = deep selector chains plus !important instead of layers.
     {
         "id_suffix": "WEB_CSS_CASCADE_0004",
         "spec_id": "CSS-CASCADE-SPECIFICITY-01",
@@ -659,6 +697,7 @@ WEB_TRAJECTORIES: List[Dict[str, Any]] = [
         "validation_rules": WEB_SPECS[3].validation_rules,
         "description": WEB_SPECS[3].description
     },
+    # Pair 5: rejected = div-based modal with no ARIA roles or keyboard handling.
     {
         "id_suffix": "WEB_HTML_DIALOG_0005",
         "spec_id": "HTML-DIALOG-MODAL-01",
@@ -680,6 +719,7 @@ WEB_TRAJECTORIES: List[Dict[str, Any]] = [
         "validation_rules": WEB_SPECS[4].validation_rules,
         "description": WEB_SPECS[4].description
     },
+    # Pair 6: rejected = plain text input with no search role or label.
     {
         "id_suffix": "WEB_HTML_SEARCH_0006",
         "spec_id": "HTML-SEARCH-FORM-01",
@@ -698,6 +738,7 @@ WEB_TRAJECTORIES: List[Dict[str, Any]] = [
         "validation_rules": WEB_SPECS[5].validation_rules,
         "description": WEB_SPECS[5].description
     },
+    # Pair 7: rejected = div soup with no landmarks or skip link.
     {
         "id_suffix": "WEB_HTML_LANDMARK_0007",
         "spec_id": "HTML-LANDMARK-NAV-01",
@@ -717,6 +758,7 @@ WEB_TRAJECTORIES: List[Dict[str, Any]] = [
         "validation_rules": WEB_SPECS[6].validation_rules,
         "description": WEB_SPECS[6].description
     },
+    # Pair 8: rejected = plain type annotation that widens roles to string[].
     {
         "id_suffix": "WEB_TS_SATISFIES_0008",
         "spec_id": "TS-SATISFIES-CONFIG-01",
@@ -741,6 +783,7 @@ WEB_TRAJECTORIES: List[Dict[str, Any]] = [
         "validation_rules": WEB_SPECS[7].validation_rules,
         "description": WEB_SPECS[7].description
     },
+    # Pair 9: rejected = `any`-typed handler with no exhaustiveness check.
     {
         "id_suffix": "WEB_TS_DISCRIMINATED_0009",
         "spec_id": "TS-DISCRIMINATED-UNION-01",
@@ -761,6 +804,7 @@ WEB_TRAJECTORIES: List[Dict[str, Any]] = [
         "validation_rules": WEB_SPECS[8].validation_rules,
         "description": WEB_SPECS[8].description
     },
+    # Pair 10: rejected = `any` everywhere, discarding generic constraints.
     {
         "id_suffix": "WEB_TS_GENERICS_0010",
         "spec_id": "TS-GENERIC-CONSTRAINTS-01",
@@ -783,6 +827,7 @@ WEB_TRAJECTORIES: List[Dict[str, Any]] = [
         "validation_rules": WEB_SPECS[9].validation_rules,
         "description": WEB_SPECS[9].description
     },
+    # Pair 11: rejected = CommonJS plus enum and parameter properties, which native type stripping cannot run.
     {
         "id_suffix": "WEB_NODE_STRIP_0011",
         "spec_id": "NODE-NATIVE-TYPE-STRIP-01",
@@ -802,6 +847,7 @@ WEB_TRAJECTORIES: List[Dict[str, Any]] = [
         "validation_rules": WEB_SPECS[10].validation_rules,
         "description": WEB_SPECS[10].description
     },
+    # Pair 12: rejected = bare fetch with no timeout, error handling or typing.
     {
         "id_suffix": "WEB_TS_FETCH_0012",
         "spec_id": "TS-FETCH-ABORT-STREAM-01",
@@ -831,9 +877,13 @@ def validate_web_spec(spec: WebComponentSpec) -> bool:
 
 def generate_web_corpus_records(created_at: Optional[str] = None) -> List[Dict[str, Any]]:
     """Generates unified records compliant with both TrainingPair and WebComponentSpec schemas."""
+    # Fixed default timestamp keeps the exported corpus byte-reproducible; callers
+    # may pass created_at to override it.
     ts = created_at or "2026-11-16T21:16:00.000000+00:00"
     records = []
     for item in WEB_TRAJECTORIES:
+        # Superset record: the TrainingPair fields plus the spec metadata (spec_id,
+        # title, code_snippet, validation_rules, description).
         record = {
             "id": f"TWU_GOLD_{item['id_suffix']}",
             "domain": item["domain"],
@@ -860,7 +910,10 @@ def export_web_specs(dest_path: Optional[Path] = None) -> Tuple[int, str]:
 
     lines = []
     for spec in WEB_SPECS:
+        # Refuse to export a spec whose own sample lacks its stated rules. Note this is
+        # an `assert`, so it is skipped under python -O.
         assert validate_web_spec(spec), f"Spec validation failed for {spec.spec_id}"
+        # sort_keys + fixed order keep the file and its hash deterministic.
         lines.append(json.dumps(asdict(spec), sort_keys=True))
 
     content = "\n".join(lines) + "\n"
@@ -870,6 +923,8 @@ def export_web_specs(dest_path: Optional[Path] = None) -> Tuple[int, str]:
 
 def export_web_corpus(dest_path: Optional[Path] = None) -> Tuple[int, str]:
     """Exports web corpus trajectories to JSONL and returns row count and sha256."""
+    # Different default location from export_web_specs: the corpus goes under
+    # data/corpus/web/, the raw specs under exchange/.
     target = dest_path or (Path(__file__).resolve().parent.parent / "data" / "corpus" / "web" / "web_corpus.jsonl")
     target.parent.mkdir(parents=True, exist_ok=True)
 

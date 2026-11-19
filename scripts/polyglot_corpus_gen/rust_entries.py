@@ -4,11 +4,24 @@ All chosen/completion programs are self-contained Rust 2021 programs with self-t
 
 from datetime import datetime, timezone
 
+# Single timestamp shared by all records in this module; evaluated at import time.
 NOW = datetime.now(timezone.utc).isoformat()
 
+# Record schema (shared by every *_entries.py file):
+#   id / domain / kind  - unique TWU_POLY_<LANG>_<KIND>_NNNN id, language tag, and "sft" or "dpo".
+#   prompt              - the instruction a model is trained to answer.
+#   completion          - (sft) a full, runnable reference program that self-tests with assertions.
+#   chosen / rejected   - (dpo) a correct program vs. a plausible but flawed one for the same prompt.
+#   rejection_reason    - (dpo) the concrete defect in "rejected", so the preference signal is explicit.
+#   capabilities        - skill tags used to balance and filter the corpus.
+#   quality             - "execution_verified": the code was compiled and run before being committed.
+#   created_at          - module import time (NOW), not a per-record authoring time.
+# The code bodies are raw strings (r"""...""") so backslashes and escapes in the target language survive intact.
+# SFT entries 1-6 teach whole-program patterns; DPO entries 1-6 teach one specific pitfall each.
 RUST_ENTRIES = [
     # ------------------ SFT 001 ------------------
     {
+        # Teaches: lock-free SPSC queue with AtomicUsize and acquire/release orderings.
         "id": "TWU_POLY_RUST_SFT_0001",
         "domain": "rust",
         "kind": "sft",
@@ -86,6 +99,7 @@ fn main() {
     },
     # ------------------ SFT 002 ------------------
     {
+        # Teaches: sharded thread-safe LRU cache with RwLock and HashMap.
         "id": "TWU_POLY_RUST_SFT_0002",
         "domain": "rust",
         "kind": "sft",
@@ -170,6 +184,7 @@ fn main() {
     },
     # ------------------ SFT 003 ------------------
     {
+        # Teaches: panic-free bounds-checked slice wrapper (split_at, checked get).
         "id": "TWU_POLY_RUST_SFT_0003",
         "domain": "rust",
         "kind": "sft",
@@ -248,6 +263,7 @@ fn main() {
     },
     # ------------------ SFT 004 ------------------
     {
+        # Teaches: worker ThreadPool using mpsc channels, with graceful shutdown on Drop.
         "id": "TWU_POLY_RUST_SFT_0004",
         "domain": "rust",
         "kind": "sft",
@@ -347,6 +363,7 @@ fn main() {
     },
     # ------------------ SFT 005 ------------------
     {
+        # Teaches: simplified Arc built from AtomicUsize with a deallocation fence.
         "id": "TWU_POLY_RUST_SFT_0005",
         "domain": "rust",
         "kind": "sft",
@@ -433,6 +450,7 @@ fn main() {
     },
     # ------------------ SFT 006 ------------------
     {
+        # Teaches: zero-copy binary packet decoder with bounds validation and header CRC check.
         "id": "TWU_POLY_RUST_SFT_0006",
         "domain": "rust",
         "kind": "sft",
@@ -515,6 +533,7 @@ fn main() {
     },
     # ------------------ DPO 001 ------------------
     {
+        # Preference pair. Chosen: correct version. Rejected: mutating a static mut from several threads in unsafe code (data race); chosen uses safe sharing.
         "id": "TWU_POLY_RUST_DPO_0001",
         "domain": "rust",
         "kind": "dpo",
@@ -569,6 +588,7 @@ fn main() {
     },
     # ------------------ DPO 002 ------------------
     {
+        # Preference pair. Chosen: correct version. Rejected: re-locking a non-reentrant Mutex on the same thread (self-deadlock).
         "id": "TWU_POLY_RUST_DPO_0002",
         "domain": "rust",
         "kind": "dpo",
@@ -630,6 +650,7 @@ impl BadService {
     },
     # ------------------ DPO 003 ------------------
     {
+        # Preference pair. Chosen: correct version. Rejected: direct slice[index] on untrusted input (panic); chosen uses get().
         "id": "TWU_POLY_RUST_DPO_0003",
         "domain": "rust",
         "kind": "dpo",
@@ -657,6 +678,7 @@ fn main() {
     },
     # ------------------ DPO 004 ------------------
     {
+        # Preference pair. Chosen: correct version. Rejected: parent/child Arc cycle that leaks; chosen uses Weak for the back-link.
         "id": "TWU_POLY_RUST_DPO_0004",
         "domain": "rust",
         "kind": "dpo",
@@ -713,6 +735,7 @@ fn leak_cycle() {
     },
     # ------------------ DPO 005 ------------------
     {
+        # Preference pair. Chosen: correct version. Rejected: transmute to extend a lifetime to static (use-after-free); chosen returns a properly lifetimed slice.
         "id": "TWU_POLY_RUST_DPO_0005",
         "domain": "rust",
         "kind": "dpo",
@@ -758,6 +781,7 @@ impl UnsoundHolder {
     },
     # ------------------ DPO 006 ------------------
     {
+        # Preference pair. Chosen: correct version. Rejected: a leftover Sender clone keeps the channel open so the receiver never finishes.
         "id": "TWU_POLY_RUST_DPO_0006",
         "domain": "rust",
         "kind": "dpo",

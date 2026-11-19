@@ -15,6 +15,8 @@ DPO pairs provide realistic Go pitfalls:
 - sync.WaitGroup.Add called inside goroutine
 - Context leak on missing cancel() call
 """
+# Standard-library only. The Go source is stored as plain strings and never
+# compiled here; it is training data, so it must stay byte-exact.
 from dataclasses import dataclass, asdict
 import hashlib
 import json
@@ -23,6 +25,12 @@ from typing import Dict, List, Optional, Any
 
 @dataclass
 class GoTrajectory:
+    """One Go DPO training item: prompt, correct and flawed answers, and a Go test.
+
+    ``chosen`` is the idiomatic solution, ``rejected`` a realistic pitfall (the bug
+    is named in a Go comment), ``test_code`` a ``testing`` function that exercises
+    ``chosen``, ``capabilities`` skill tags.
+    """
     id: str
     category: str
     prompt: str
@@ -31,11 +39,15 @@ class GoTrajectory:
     test_code: str
     capabilities: List[str]
 
+# Hand-written problem set. Go code is held in Python string literals joined by
+# implicit concatenation, one Go source line per Python line.
 GO_PROBLEMS: List[GoTrajectory] = [
     GoTrajectory(
         id="GO-WORKER-POOL-01",
         category="concurrency",
         prompt="Write an idiomatic Go worker pool with context cancellation, bounded worker count, error aggregation with sync.WaitGroup, and a results channel.",
+        # Correct worker pool: ctx cancellation, bounded workers, WaitGroup.Add called
+        # before the goroutine starts (avoids the Add-inside-goroutine race).
         chosen=(
             "package pool\n\n"
             "import (\n"
@@ -85,6 +97,7 @@ GO_PROBLEMS: List[GoTrajectory] = [
             "    p.wg.Wait()\n"
             "}\n"
         ),
+        # Flawed version: no cancellation and no WaitGroup, so goroutines leak.
         rejected=(
             "package pool\n\n"
             "type Pool struct {\n"
@@ -101,6 +114,7 @@ GO_PROBLEMS: List[GoTrajectory] = [
             "    }\n"
             "}\n"
         ),
+        # Test uses atomic counters so the test itself is race-free.
         test_code=(
             "func TestPool(t *testing.T) {\n"
             "    ctx, cancel := context.WithCancel(context.Background())\n"
@@ -120,6 +134,8 @@ GO_PROBLEMS: List[GoTrajectory] = [
         ),
         capabilities=["goroutines", "context", "sync.WaitGroup", "channels"]
     ),
+    # Problem 2: sharded concurrent map; keys are spread over ShardCount RWMutex
+    # shards by FNV-1a hash to cut lock contention.
     GoTrajectory(
         id="GO-SHARDED-MAP-01",
         category="data_structures",
@@ -164,6 +180,7 @@ GO_PROBLEMS: List[GoTrajectory] = [
             "    return val, ok\n"
             "}\n"
         ),
+        # Flawed version: one shared map with no sharding or locking.
         rejected=(
             "package cmap\n\n"
             "type ConcurrentMap struct {\n"
@@ -190,6 +207,8 @@ GO_PROBLEMS: List[GoTrajectory] = [
         ),
         capabilities=["sync.RWMutex", "fnv-hash", "sharding", "concurrency"]
     ),
+    # Problem 3: token bucket; refill is computed lazily from elapsed time on each
+    # TryAcquire, so no background goroutine is needed.
     GoTrajectory(
         id="GO-TOKEN-BUCKET-01",
         category="networking",
@@ -232,6 +251,7 @@ GO_PROBLEMS: List[GoTrajectory] = [
             "    return false\n"
             "}\n"
         ),
+        # Flawed version: sleep-based throttling instead of a bucket.
         rejected=(
             "package ratelimit\n\n"
             "// BUG: Sleep-based spinlock holding mutex or time.Tick leaking goroutines\n"
@@ -250,6 +270,9 @@ GO_PROBLEMS: List[GoTrajectory] = [
         ),
         capabilities=["rate-limiting", "token-bucket", "time.Time", "sync.Mutex"]
     ),
+    # Problem 4: binary packet decoder. Header is magic(4)+len(4)+crc32(4), all
+    # big-endian; length is bounded by MaxPayloadSize BEFORE allocating, so
+    # untrusted input cannot force a huge allocation.
     GoTrajectory(
         id="GO-PACKET-DECODER-01",
         category="protocols",
@@ -293,6 +316,7 @@ GO_PROBLEMS: List[GoTrajectory] = [
             "    return &Packet{Payload: payload}, nil\n"
             "}\n"
         ),
+        # Flawed version: allocates from an attacker-controlled length (remote OOM).
         rejected=(
             "package packet\n\n"
             "// BUG: Reads length and allocates unconstrained make([]byte, length) allowing remote OOM crash\n"
@@ -322,6 +346,12 @@ GO_PROBLEMS: List[GoTrajectory] = [
 ]
 
 def generate_go_corpus() -> List[Dict[str, Any]]:
+    """Convert GO_PROBLEMS into flat DPO records for the training pipeline.
+
+    Records get a ``GO_CORPUS_`` id prefix, ``domain='go'``, ``kind='dpo'`` and
+    quality ``gold_certified`` (hand-curated). ``test_code`` is exported under the
+    shared ``test_assertions`` key so all domains use one schema.
+    """
     records = []
     for p in GO_PROBLEMS:
         records.append({

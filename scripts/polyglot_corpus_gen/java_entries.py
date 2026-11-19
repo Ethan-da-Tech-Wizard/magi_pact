@@ -4,11 +4,24 @@ All chosen/completion programs are self-contained Java classes with self-testing
 
 from datetime import datetime, timezone
 
+# Single timestamp shared by all records in this module; evaluated at import time.
 NOW = datetime.now(timezone.utc).isoformat()
 
+# Record schema (shared by every *_entries.py file):
+#   id / domain / kind  - unique TWU_POLY_<LANG>_<KIND>_NNNN id, language tag, and "sft" or "dpo".
+#   prompt              - the instruction a model is trained to answer.
+#   completion          - (sft) a full, runnable reference program that self-tests with assertions.
+#   chosen / rejected   - (dpo) a correct program vs. a plausible but flawed one for the same prompt.
+#   rejection_reason    - (dpo) the concrete defect in "rejected", so the preference signal is explicit.
+#   capabilities        - skill tags used to balance and filter the corpus.
+#   quality             - "execution_verified": the code was compiled and run before being committed.
+#   created_at          - module import time (NOW), not a per-record authoring time.
+# The code bodies are raw strings (r"""...""") so backslashes and escapes in the target language survive intact.
+# SFT entries 1-6 teach whole-program patterns; DPO entries 1-6 teach one specific pitfall each.
 JAVA_ENTRIES = [
     # ------------------ SFT 001 ------------------
     {
+        # Teaches: Java 21 virtual-thread worker pool with StructuredTaskScope and timeout propagation.
         "id": "TWU_POLY_JAVA_SFT_0001",
         "domain": "java",
         "kind": "sft",
@@ -60,6 +73,7 @@ public final class LoomWorkerPool {
     },
     # ------------------ SFT 002 ------------------
     {
+        # Teaches: bounded blocking queue: ReentrantLock plus notFull/notEmpty Conditions.
         "id": "TWU_POLY_JAVA_SFT_0002",
         "domain": "java",
         "kind": "sft",
@@ -169,6 +183,7 @@ public class BoundedBlockingQueue<T> {
     },
     # ------------------ SFT 003 ------------------
     {
+        # Teaches: striped 64-bit adder with padded cells to avoid false sharing.
         "id": "TWU_POLY_JAVA_SFT_0003",
         "domain": "java",
         "kind": "sft",
@@ -255,6 +270,7 @@ public class StripedLongAdder {
     },
     # ------------------ SFT 004 ------------------
     {
+        # Teaches: ByteBuffer ring buffer with position/limit bounds and wrap-around.
         "id": "TWU_POLY_JAVA_SFT_0004",
         "domain": "java",
         "kind": "sft",
@@ -337,6 +353,7 @@ public class ByteBufferRing {
     },
     # ------------------ SFT 005 ------------------
     {
+        # Teaches: CompletableFuture event dispatcher on a bounded ThreadPoolExecutor with per-handler error isolation.
         "id": "TWU_POLY_JAVA_SFT_0005",
         "domain": "java",
         "kind": "sft",
@@ -399,6 +416,7 @@ public class AsyncEventBus {
     },
     # ------------------ SFT 006 ------------------
     {
+        # Teaches: lock-free prefix trie using AtomicReferenceArray.
         "id": "TWU_POLY_JAVA_SFT_0006",
         "domain": "java",
         "kind": "sft",
@@ -472,6 +490,7 @@ public class ConcurrentTrie {
     },
     # ------------------ DPO 001 ------------------
     {
+        # Preference pair. Chosen: correct version. Rejected: singleton double-checked locking without volatile (unsafe publication via instruction reordering).
         "id": "TWU_POLY_JAVA_DPO_0001",
         "domain": "java",
         "kind": "dpo",
@@ -527,6 +546,7 @@ public class ConcurrentTrie {
     },
     # ------------------ DPO 002 ------------------
     {
+        # Preference pair. Chosen: correct version. Rejected: structurally modifying an ArrayList inside a for-each (ConcurrentModificationException).
         "id": "TWU_POLY_JAVA_DPO_0002",
         "domain": "java",
         "kind": "dpo",
@@ -578,6 +598,7 @@ public class BuggyIteration {
     },
     # ------------------ DPO 003 ------------------
     {
+        # Preference pair. Chosen: correct version. Rejected: Executors.newFixedThreadPool with an unbounded queue (OutOfMemoryError); chosen bounds the queue.
         "id": "TWU_POLY_JAVA_DPO_0003",
         "domain": "java",
         "kind": "dpo",
@@ -626,6 +647,7 @@ public class DangerousThreadPool {
     },
     # ------------------ DPO 004 ------------------
     {
+        # Preference pair. Chosen: correct version. Rejected: (low + high) / 2 midpoint overflow in binary search.
         "id": "TWU_POLY_JAVA_DPO_0004",
         "domain": "java",
         "kind": "dpo",
@@ -681,6 +703,7 @@ public class DangerousThreadPool {
     },
     # ------------------ DPO 005 ------------------
     {
+        # Preference pair. Chosen: correct version. Rejected: transfer locking objects in caller order (lock-order inversion deadlock); chosen imposes a global order.
         "id": "TWU_POLY_JAVA_DPO_0005",
         "domain": "java",
         "kind": "dpo",
@@ -745,6 +768,7 @@ public class DangerousThreadPool {
     },
     # ------------------ DPO 006 ------------------
     {
+        # Preference pair. Chosen: correct version. Rejected: manual close() in finally that masks the primary exception; chosen uses try-with-resources.
         "id": "TWU_POLY_JAVA_DPO_0006",
         "domain": "java",
         "kind": "dpo",

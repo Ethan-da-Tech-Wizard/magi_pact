@@ -8,6 +8,9 @@ Covers:
 5. Git Worktree Branching Operations (collision-free agent worktrees, advisory locks, porcelain diagnostics)
 """
 
+# Dependencies: stdlib plus TrainingPair/DOMAINS from the sibling dataset module.
+# Everything in this module is offline: validators are regex/string heuristics,
+# the "fixtures" are in-memory dicts, and no command is ever executed.
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 import hashlib
@@ -17,6 +20,8 @@ from pathlib import Path
 import re
 from typing import Dict, List, Optional, Any, Tuple
 
+# DOMAINS is imported but not referenced directly in this module; the domain
+# keys used below are all members of dataset.DOMAINS.
 from .dataset import TrainingPair, DOMAINS
 
 
@@ -24,6 +29,8 @@ from .dataset import TrainingPair, DOMAINS
 # Strict Zero-Spend & Firmware Safety Gate (No hardware flashing)
 # =====================================================================
 
+# Safety gate: raised, never swallowed, so a hazardous command cannot be
+# silently skipped by a caller that forgets to check a return value.
 class FirmwareSafetyViolation(RuntimeError):
     """Raised when an operation attempts destructive or non-read-only hardware actions."""
     pass
@@ -36,20 +43,34 @@ class FirmwareSafetyGate:
     corruption, or capsule execution.
     """
 
+    # Deny-list, matched case-insensitively against the lower-cased command with
+    # re.search. Intent: block anything that could write firmware, NVRAM/efivars,
+    # raw flash/memory devices, or trigger a reboot-to-flash. Deny-lists are
+    # best-effort, not a sandbox; see the ALLOWED list for the intended safe verbs.
     HAZARDOUS_PATTERNS = [
         r"\bflashrom\b",
+        # fwupdmgr verbs that change device state (as opposed to get-* queries).
         r"\bfwupdmgr\s+(?:update|install|reinstall|modify-device-flag)\b",
         r"\bflash\b",
+        # NOTE: "\b" needs a word character on one side. In "...--force" the "-" is not
+        # a word character, so with a space before it neither of these two patterns
+        # will match " --force" / " --reboot" (they only match when glued to a
+        # preceding word char). Other patterns still catch the dangerous commands.
         r"\b--force\b",
         r"\b--reboot\b",
         r"\bwrmsr\b",
+        # Deleting efivars/firmware sysfs entries can brick boards.
         r"\brm\s+.*(?:efivars|sys/firmware)\b",
+        # Writing to efivars through shell redirection.
         r"\b(?:echo|printf)\s+.*>\s*/sys/firmware/efi/efivars\b",
+        # Raw block/flash device targets for dd.
         r"\bdd\b.*of=/dev/(?:nvme[0-9a-z]*|sd[a-z0-9]*|mtd[0-9]*|spi[0-9]*|mem)",
         r"\bmem\b.*write",
         r"\bnvram-wakeup\b",
     ]
 
+    # Whitelist of read-only verbs the corpus teaches. Documentation/reference
+    # only: verify_command_safety() does not consult it (it only applies the deny-list).
     ALLOWED_READONLY_COMMANDS = [
         "fwupdmgr get-devices",
         "fwupdmgr get-updates",
@@ -64,7 +85,9 @@ class FirmwareSafetyGate:
 
     @classmethod
     def verify_command_safety(cls, cmd: str) -> bool:
+        # The returned value is always True; unsafe input is signalled by raising.
         """Inspects shell commands or API calls for forbidden physical flash operations."""
+        # Case-fold first so "FLASHROM" and "flashrom" are treated alike.
         lowered = cmd.lower()
         for pat in cls.HAZARDOUS_PATTERNS:
             if re.search(pat, lowered):
@@ -83,12 +106,15 @@ class FwupdFixtureParser:
 
     @staticmethod
     def load_fixture(fixture_path: Path) -> Dict[str, Any]:
+        """Load a JSON fixture file (simulated fwupd/ESRT output) from disk; read-only."""
         with open(fixture_path, "r", encoding="utf-8") as f:
             return json.load(f)
 
     @classmethod
     def parse_devices(cls, data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Normalise fwupd ``get-devices`` JSON into flat dicts with derived is_updatable / needs_reboot booleans."""
         devices = data.get("Devices", [])
+        # Missing keys fall back to None/[] so partial fixtures never raise.
         parsed = []
         for dev in devices:
             parsed.append({
@@ -107,9 +133,12 @@ class FwupdFixtureParser:
 
     @classmethod
     def parse_esrt(cls, esrt_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Convert ESRT table entries to report dicts, adding a ``downgrade_safe`` flag."""
         entries = esrt_data.get("entries", [])
         results = []
         for e in entries:
+            # ESRT versions are integers; current >= lowest-supported means the installed
+            # firmware has not fallen below the anti-rollback floor.
             # Check version downgrade protection
             cur_ver = e.get("fw_version", 0)
             lowest = e.get("lowest_supported_fw_version", 0)
@@ -135,7 +164,14 @@ class BashSafetyValidator:
 
     @classmethod
     def validate(cls, script: str) -> Dict[str, Any]:
+        """Heuristically check a Bash script for strict mode, a cleanup trap, IFS and unquoted ``rm -rf``.
+
+        Returns a dict: valid (no issues), has_strict_flags, has_trap, has_ifs
+        (informational only, not counted as an issue) and the issue list.
+        """
         issues = []
+        # Regex heuristics only (no shell parsing): they can be fooled by comments or
+        # strings, which is acceptable for screening curated corpus entries.
         # Check strict error flags
         has_strict_flags = bool(
             re.search(r"set\s+-[a-zA-Z]*e[a-zA-Z]*", script)
@@ -153,6 +189,8 @@ class BashSafetyValidator:
         has_ifs = bool(re.search(r"IFS=", script))
 
         # Check for unquoted dangerous rm
+        # Only flags `rm -rf $VAR` at the END of the script text (the `$` anchor has no
+        # MULTILINE flag), so it will not catch every occurrence.
         dangerous_rm = bool(re.search(r"rm\s+-rf\s+\$[a-zA-Z0-9_]+\s*$", script))
         if dangerous_rm:
             issues.append("Dangerous unquoted rm -rf on variable expansion")
@@ -169,10 +207,12 @@ class BashSafetyValidator:
 class ArchPkgbuildValidator:
     """Validates Arch Linux PKGBUILD scripts for packaging compliance."""
 
+    # Fields every valid PKGBUILD must define at line start.
     MANDATORY_VARS = ["pkgname", "pkgver", "pkgrel", "arch", "license"]
 
     @classmethod
     def validate(cls, pkgbuild_content: str) -> Dict[str, Any]:
+        """Check a PKGBUILD for mandatory variables, a package() function, checksums and common bad practices."""
         issues = []
         for var in cls.MANDATORY_VARS:
             pattern = rf"^{var}="
@@ -185,6 +225,8 @@ class ArchPkgbuildValidator:
         if not has_package_fn:
             issues.append("Missing mandatory 'package()' or 'package_<subpkg>()' function")
 
+        # Arch policy: packages install under /usr (never /usr/local), and language
+        # tools like cargo must be given an explicit --root.
         # Check for bad practices
         if "/usr/local" in pkgbuild_content:
             issues.append("Forbidden target path '/usr/local' in Arch package; use '/usr'")
@@ -202,6 +244,7 @@ class ArchPkgbuildValidator:
         return {
             "valid": len(issues) == 0,
             "issues": issues,
+            # Heuristic: "-git" anywhere in the text (name, source url, ...) marks a VCS package.
             "is_vcs_package": "-git" in pkgbuild_content,
         }
 
@@ -211,7 +254,9 @@ class FedoraDnf5Validator:
 
     @classmethod
     def validate_command(cls, cmd: str) -> Dict[str, Any]:
+        """Flag legacy yum use, direct rpm manipulation and unsafe ``--installroot`` usage in a dnf5 command line."""
         issues = []
+        # Substring tests on the raw command string (no tokenizer).
         is_dnf5 = "dnf5" in cmd
 
         if "yum " in cmd:
@@ -225,6 +270,7 @@ class FedoraDnf5Validator:
         if "cp -r /" in cmd or "cp -r /bin" in cmd:
             issues.append("Manual directory copy instead of structured package management")
         
+        # A container rootfs should pin the release and skip docs to stay reproducible and small.
         # Check installroot safety
         if "--installroot" in cmd:
             if "--releasever" not in cmd:
@@ -244,7 +290,11 @@ class GitWorktreeManager:
 
     @staticmethod
     def parse_worktree_porcelain(porcelain_output: str) -> List[Dict[str, Any]]:
+        """Parse ``git worktree list --porcelain`` text into a list of dicts (path, head, branch, locked, lock_reason, prunable)."""
         worktrees = []
+        # Porcelain output is blocks of "key value" lines separated by blank lines;
+        # a new "worktree" line also starts a new record, so output without blank
+        # separators still parses.
         current: Dict[str, Any] = {}
 
         for line in porcelain_output.splitlines():
@@ -257,6 +307,7 @@ class GitWorktreeManager:
 
             parts = line.split(" ", 1)
             key = parts[0]
+            # Keys without a value (e.g. "bare", "detached") are recorded as True.
             val = parts[1] if len(parts) > 1 else True
 
             if key == "worktree":
@@ -268,6 +319,7 @@ class GitWorktreeManager:
                 current["head"] = val
             elif key == "branch":
                 current["branch"] = val
+            # "locked" may carry an optional reason on the same line.
             elif key == "locked":
                 current["locked"] = True
                 current["lock_reason"] = val if val is not True else "no reason"
@@ -280,6 +332,11 @@ class GitWorktreeManager:
         return worktrees
 
 
+# The corpus: one dict per DPO pair. Each entry has domain, id_suffix (becomes
+# TWU_GOLD_<suffix>), prompt, chosen (reference answer), rejected (flawed
+# answer; the flaw is called out in a comment inside it) and capabilities tags.
+# The answers are script/source text held in Python string literals and are
+# training data, so they must remain byte-exact.
 # =====================================================================
 # Systems & Firmware Golden Trajectory Definitions (15 Pairs)
 # =====================================================================
@@ -288,6 +345,7 @@ SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
     # -------------------------------------------------------------
     # 1. BASH SCRIPTING TRAJECTORIES (bash_posix)
     # -------------------------------------------------------------
+    # Bash 1: supervisor using a mkdir mutex, traps and an atomic mv for state.
     {
         "domain": "bash_posix",
         "id_suffix": "BASH_SUPERVISOR_0001",
@@ -344,6 +402,7 @@ SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
         ),
         "capabilities": ["bash", "process_supervision", "atomic_locking", "signal_traps", "posix"],
     },
+    # Bash 2: NUL-delimited find/read loop so odd filenames are handled safely.
     {
         "domain": "bash_posix",
         "id_suffix": "BASH_FILE_TRAVERSAL_0002",
@@ -392,6 +451,7 @@ SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
         ),
         "capabilities": ["bash", "stream_processing", "zero_delimiter", "quoting", "sha256"],
     },
+    # Bash 3: getopts parser with validation and printf-built JSON.
     {
         "domain": "bash_posix",
         "id_suffix": "BASH_GETOPTS_JSON_0003",
@@ -458,6 +518,8 @@ SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
     # -------------------------------------------------------------
     # 2. ARCH LINUX PKGBUILD TRAJECTORIES (arch_linux)
     # -------------------------------------------------------------
+    # Arch 1: Rust PKGBUILD (offline cargo fetch, LTO, systemd unit).
+    # The sha256sums in these samples are illustrative placeholders, not real digests.
     {
         "domain": "arch_linux",
         "id_suffix": "ARCH_PKGBUILD_RUST_LTO_0001",
@@ -523,6 +585,7 @@ SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
         ),
         "capabilities": ["arch", "pkgbuild", "rust", "lto", "reproducible_build", "systemd"],
     },
+    # Arch 2: -git VCS package with a dynamic pkgver().
     {
         "domain": "arch_linux",
         "id_suffix": "ARCH_PKGBUILD_VCS_GIT_0002",
@@ -571,6 +634,7 @@ SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
         ),
         "capabilities": ["arch", "pkgbuild", "vcs_git", "pkgver_dynamic", "python_packaging"],
     },
+    # Arch 3: split package (libmagi + magi-cli) from one CMake build.
     {
         "domain": "arch_linux",
         "id_suffix": "ARCH_PKGBUILD_SPLIT_PACKAGE_0003",
@@ -623,6 +687,7 @@ SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
     # -------------------------------------------------------------
     # 3. FEDORA DNF5 SYSTEM ADMINISTRATION TRAJECTORIES (fedora_linux)
     # -------------------------------------------------------------
+    # Fedora 1: non-interactive dnf5 security-only upgrade with an audit trail.
     {
         "domain": "fedora_linux",
         "id_suffix": "FEDORA_DNF5_SECURITY_UPGRADE_0001",
@@ -660,6 +725,7 @@ SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
         ),
         "capabilities": ["fedora", "dnf5", "security_advisories", "sysadmin", "rpm_integrity"],
     },
+    # Fedora 2: Python tool that dry-runs (--assumeno) before applying dnf5 history undo.
     {
         "domain": "fedora_linux",
         "id_suffix": "FEDORA_DNF5_HISTORY_ROLLBACK_0002",
@@ -703,6 +769,7 @@ SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
         ),
         "capabilities": ["fedora", "dnf5", "history_undo", "rollback", "dry_run"],
     },
+    # Fedora 3: minimal container rootfs via dnf5 --installroot.
     {
         "domain": "fedora_linux",
         "id_suffix": "FEDORA_DNF5_CONTAINER_ROOTFS_0003",
@@ -744,6 +811,9 @@ SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
     # -------------------------------------------------------------
     # 4. BIOS/UEFI fwupd QUERY FIXTURES (bios_uefi) - STRICTLY READ-ONLY
     # -------------------------------------------------------------
+    # BIOS/UEFI 1: read-only fwupd device parser. The "rejected" side shows the
+    # exact hazardous commands (fwupdmgr update --force, flashrom) that
+    # FirmwareSafetyGate is meant to block.
     {
         "domain": "bios_uefi",
         "id_suffix": "BIOS_FWUPD_READONLY_QUERY_0001",
@@ -793,6 +863,7 @@ SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
         ),
         "capabilities": ["bios_uefi", "fwupd", "read_only", "esrt", "zero_hardware_spend"],
     },
+    # BIOS/UEFI 2: ESRT anti-rollback inspection from mock data (never writes sysfs).
     {
         "domain": "bios_uefi",
         "id_suffix": "BIOS_UEFI_ESRT_SYSFS_PARSER_0002",
@@ -835,6 +906,7 @@ SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
         ),
         "capabilities": ["bios_uefi", "esrt", "anti_rollback", "sysfs_readonly", "firmware_security"],
     },
+    # BIOS/UEFI 3: capsule pre-flight (hash + GUID check) in simulation only.
     {
         "domain": "bios_uefi",
         "id_suffix": "BIOS_CAPSULE_METADATA_VERIFY_0003",
@@ -882,6 +954,7 @@ SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
     # -------------------------------------------------------------
     # 5. GIT WORKTREE BRANCHING OPERATIONS (git_internals)
     # -------------------------------------------------------------
+    # Git 1: per-seat worktree lifecycle (add, lock, work, unlock, remove, prune).
     {
         "domain": "git_internals",
         "id_suffix": "GIT_WORKTREE_ISOLATION_0001",
@@ -922,6 +995,7 @@ SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
         ),
         "capabilities": ["git", "worktree", "isolation", "branching", "advisory_locking"],
     },
+    # Git 2: cherry-pick inside a detached worktree and export a patch to exchange/.
     {
         "domain": "git_internals",
         "id_suffix": "GIT_WORKTREE_CHERRY_PICK_PATCH_0002",
@@ -959,6 +1033,8 @@ SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
         ),
         "capabilities": ["git", "worktree", "cherry_pick", "patch_exchange", "clean_trunk"],
     },
+    # Git 3: porcelain diagnostics and pruning. Its embedded parser mirrors
+    # GitWorktreeManager.parse_worktree_porcelain above.
     {
         "domain": "git_internals",
         "id_suffix": "GIT_WORKTREE_PORCELAIN_DIAGNOSTICS_0003",
@@ -1026,9 +1102,11 @@ SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
 
 def generate_systems_trajectories() -> List[TrainingPair]:
     """Compiles the verified Systems & Firmware trajectory suite (15 pairs)."""
+    # Build the pair list in corpus order; one shared timestamp for the whole batch.
     pairs = []
     now = datetime.now(timezone.utc).isoformat()
     for ex in SYSTEMS_TRAJECTORIES:
+        # Prefix distinguishes these hand-written gold items from other generated corpora.
         pair_id = f"TWU_GOLD_{ex['id_suffix']}"
         pairs.append(
             TrainingPair(
@@ -1038,6 +1116,7 @@ def generate_systems_trajectories() -> List[TrainingPair]:
                 prompt=ex["prompt"],
                 chosen=ex["chosen"],
                 rejected=ex["rejected"],
+                # gold_certified: hand-reviewed, not model-generated.
                 quality="gold_certified",
                 capabilities=ex["capabilities"],
                 created_at=now,
@@ -1052,9 +1131,13 @@ def export_systems_shard(seat_id: int = 4, root_dir: Optional[Path] = None) -> T
     exchange = root / "exchange"
     exchange.mkdir(parents=True, exist_ok=True)
 
+    # Shard filename encodes the seat id; the .sha256 sidecar uses "<hash>  <name>"
+    # format so `sha256sum -c` can verify it from the exchange directory.
     shard_path = exchange / f"seat_{seat_id:02d}_corpus.jsonl"
     pairs = generate_systems_trajectories()
 
+    # One JSON object per line (JSONL). Keys are not sorted here, unlike the
+    # systems_firmware exporter, so key order follows to_dict().
     with open(shard_path, "w", encoding="utf-8") as f:
         for p in pairs:
             f.write(json.dumps(p.to_dict()) + "\n")

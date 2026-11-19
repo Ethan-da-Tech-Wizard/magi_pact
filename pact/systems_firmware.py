@@ -9,6 +9,8 @@ Generates verified execution-grade trajectories for:
 
 Guarantees 0% policy leak and deterministic verification.
 """
+# Standard-library only: this module is a static, deterministic corpus plus an
+# exporter, so there are no network or third-party dependencies.
 from dataclasses import dataclass, asdict
 import hashlib
 import json
@@ -17,6 +19,11 @@ from typing import Dict, List, Optional, Tuple, Any
 
 @dataclass
 class SystemsTrajectory:
+    """One execution-grade systems trajectory: a scenario, the exact commands, and how to check them.
+
+    The fields are serialised verbatim (via ``asdict``) into the exported JSONL, so
+    renaming a field changes the on-disk training/eval format.
+    """
     trajectory_id: str
     subsystem: str  # "bash" | "arch_pkg" | "fedora_dnf5" | "bios_uefi_ro" | "git_worktree"
     title: str
@@ -27,6 +34,10 @@ class SystemsTrajectory:
     verification_rule: str
     safety_classification: str  # "read_only" | "idempotent_mutation" | "sandboxed"
 
+# The fixed, hand-authored corpus. Order matters: it is exported in this order
+# and the sha256 returned by the exporter depends on it. Every row carries a
+# safety_classification so downstream consumers can refuse anything but the
+# "read_only" / "sandboxed" classes when replaying the commands.
 SYSTEMS_CORPUS = [
     SystemsTrajectory(
         trajectory_id="SYS-BASH-LOCK-01",
@@ -74,6 +85,9 @@ SYSTEMS_CORPUS = [
         verification_rule="exit_code == 0 and signature_status == 'OK'",
         safety_classification="read_only"
     ),
+    # BIOS/UEFI row: deliberately read-only. The fixture sets allow_firmware_write
+    # to False and the verification rule asserts no "write" command is present, so
+    # this corpus can never teach a model to flash hardware.
     SystemsTrajectory(
         trajectory_id="SYS-BIOS-UEFI-01",
         subsystem="bios_uefi_ro",
@@ -109,13 +123,18 @@ SYSTEMS_CORPUS = [
 
 def export_systems_trajectories(dest_path: Optional[Path] = None) -> Tuple[int, str]:
     """Exports systems trajectories to JSONL and returns row count and sha256."""
+    # Destination defaults next to the repo's exchange/ dir; callers (e.g. tests)
+    # can pass dest_path to avoid touching the real exchange file.
     target = dest_path or (Path(__file__).resolve().parent.parent / "exchange" / "systems_trajectories.jsonl")
     target.parent.mkdir(parents=True, exist_ok=True)
 
     lines = []
+    # Compact, key-sorted JSON per row keeps the output byte-stable across runs.
     for traj in SYSTEMS_CORPUS:
         lines.append(json.dumps(asdict(traj), sort_keys=True))
 
+    # Single write + hash of the exact bytes written, so the returned digest always
+    # matches the file contents.
     content = "\n".join(lines) + "\n"
     target.write_text(content, encoding="utf-8")
     sha = hashlib.sha256(content.encode("utf-8")).hexdigest()

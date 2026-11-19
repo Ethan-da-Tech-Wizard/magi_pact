@@ -51,6 +51,8 @@ from typing import Dict, List, Optional, Any  # Type hinting annotations
 # Target Language and Systems Engineering Domains
 # ------------------------------------------------------------------------------
 # Standardized domain identifiers across the 14 core competency tracks
+# The "domain" of every record must be one of these. dedup.TrainingGate has its own
+# REQUIRED_DOMAINS list with the same 14 names; keep the two in sync.
 DOMAINS = [
     "c_cpp",          # C99 / C++20 Systems Programming, Concurrency, and Memory Management
     "csharp",         # C# .NET Memory Streams, Tasks, and Concurrency
@@ -88,6 +90,9 @@ class TrainingPair:
         capabilities (List[str]): Semantic tags describing competencies demonstrated.
         created_at (str): ISO-8601 UTC timestamp of creation.
     """
+    # Field meanings are documented in the class docstring above. `sha256` below
+    # deliberately omits id/created_at/rejected/quality, so two records with the same
+    # domain+prompt+chosen are "the same record" regardless of when or by whom they were made.
     id: str
     domain: str
     kind: str  # "dpo" | "sft"
@@ -113,8 +118,13 @@ class TrainingPair:
 # Exemplar Library
 # ==============================================================================
 # Exemplar library establishing rigorous idiomatic standards across all target domains
+# Each entry is a dict with domain, prompt, chosen (gold answer), rejected (plausible
+# bad answer) and capabilities. The code/text inside the strings is training DATA,
+# not executable project code, and must be kept byte-for-byte (it feeds record hashes).
+# Entry order matters: generate_language_matrix() derives each record id from its index.
 EXEMPLARS = [
     {
+        # Teaches: pthread mutex + two condition variables, caller-supplied storage (no malloc), full init error unwinding. Rejected: unsynchronized, unbounded index.
         "domain": "c_cpp",
         "prompt": "Write a thread-safe circular ring buffer in C99 using POSIX mutex and condition variables with zero dynamic allocation after initialization.",
         "chosen": (
@@ -153,6 +163,7 @@ EXEMPLARS = [
         "capabilities": ["concurrency", "posix", "memory_safety"],
     },
     {
+        # Teaches: bounded Channel<T> with Wait back-pressure and cancellation flowing through IAsyncEnumerable. Rejected: plain eager LINQ list, no streaming or cancellation.
         "domain": "csharp",
         "prompt": "Create a high-performance .NET 8 IAsyncEnumerable pipeline with Channel<T> bounding and cancellation token propagation.",
         "chosen": (
@@ -187,6 +198,7 @@ EXEMPLARS = [
         "capabilities": ["async", "channels", "dotnet8"],
     },
     {
+        # Teaches: Arc-style refcount ordering (Relaxed increment, Release decrement, Acquire fence before free). Rejected: non-atomic counter.
         "domain": "rust",
         "prompt": "Implement an atomic, lock-free reference counter with relaxed fast-path and acquire/release synchronization in Rust.",
         "chosen": (
@@ -218,6 +230,7 @@ EXEMPLARS = [
         "capabilities": ["lock_free", "atomics", "memory_model"],
     },
     {
+        # Teaches: Java 21 StructuredTaskScope (fail-fast, timeout, no leaked subtasks). Rejected: unbounded raw platform threads.
         "domain": "java",
         "prompt": "Implement a high-throughput bounded worker pool using Java 21 Virtual Threads (Project Loom) with structured concurrency.",
         "chosen": (
@@ -241,6 +254,7 @@ EXEMPLARS = [
         "capabilities": ["virtual_threads", "structured_concurrency", "java21"],
     },
     {
+        # Teaches: a PKGBUILD that installs only into $pkgdir and builds a release binary. The sha256sums value is the well-known hash of empty input, i.e. a placeholder, not a real checksum.
         "domain": "arch_linux",
         "prompt": "Construct a compliant Arch Linux PKGBUILD for a native Rust binary package with reproducible LTO builds, checksums, and package() directories.",
         "chosen": (
@@ -273,6 +287,7 @@ EXEMPLARS = [
         "capabilities": ["packaging", "arch", "pkgbuild", "cargo"],
     },
     {
+        # Teaches: RPM spec with systemd scriptlet macros and buildroot-relative installs. Rejected: copying straight into the live filesystem.
         "domain": "fedora_linux",
         "prompt": "Write an RPM spec file with hardened compilation flags, systemd service installation, and SELinux context restoration for Fedora 40.",
         "chosen": (
@@ -306,6 +321,7 @@ EXEMPLARS = [
         "capabilities": ["packaging", "rpm", "fedora", "systemd"],
     },
     {
+        # Teaches: read-only inspection, backup, then targeted efibootmgr edits. Rejected: wiping efivars, which the destructive-pattern scanner in dedup.py also flags.
         "domain": "bios_uefi",
         "prompt": "Show how to safely inspect, backup, and modify UEFI boot order using efibootmgr on a dual-boot Arch/Fedora system without corrupting NVRAM.",
         "chosen": (
@@ -328,6 +344,7 @@ EXEMPLARS = [
         "capabilities": ["uefi", "bootloader", "nvram", "kernel"],
     },
     {
+        # Teaches: cherry-pick -x with signing and patch export for peer review. Rejected: force-pushing main (also caught by dedup.py destructive patterns).
         "domain": "git_internals",
         "prompt": "Resolve a divergent branch with interactive cherry-picking, preserving GPG signatures, and exporting clean patches for peer review.",
         "chosen": (
@@ -347,6 +364,7 @@ EXEMPLARS = [
         "capabilities": ["git", "patch_exchange", "gpg", "atomic_history"],
     },
     {
+        # Teaches: building a typed envelope with pact.protocol.make_envelope instead of ad-hoc strings.
         "domain": "mesh_protocol",
         "prompt": "Demonstrate how the Magi CLI formats and signs an envelope to dispatch tasks across the 32-seat Magi Pact mesh.",
         "chosen": (
@@ -371,6 +389,7 @@ EXEMPLARS = [
         "capabilities": ["magi_mesh", "protocol", "envelope", "ipc"],
     },
     {
+        # Teaches: discriminated unions with an exhaustive `never` check in the default branch.
         "domain": "typescript",
         "prompt": "Implement a compile-time validated state machine with exhaustive pattern matching and discriminated unions in TypeScript.",
         "chosen": (
@@ -410,6 +429,7 @@ EXEMPLARS = [
         "capabilities": ["types", "state_machine", "discriminated_unions"],
     },
     {
+        # Teaches: dependency-free SSE with keep-alive pings and a padding comment to defeat proxy buffering. Rejected: pulling in a framework.
         "domain": "javascript",
         "prompt": "Create a zero-npm-dependency Node.js 24 Server-Sent Events (SSE) server with ping keep-alives and proxy buffer bypass headers.",
         "chosen": (
@@ -441,6 +461,7 @@ EXEMPLARS = [
         "capabilities": ["node24", "sse", "zero_dependency", "networking"],
     },
     {
+        # Teaches: MonitorMixin + condition variable pool with a monotonic-clock deadline. Rejected: a global connection variable.
         "domain": "ruby",
         "prompt": "Implement a thread-safe connection pool with health check ping and automatic reconnection in modern Ruby 3.3.",
         "chosen": (
@@ -483,6 +504,7 @@ EXEMPLARS = [
         "capabilities": ["ruby3", "concurrency", "connection_pool", "monitor"],
     },
     {
+        # Teaches: container queries, semantic landmarks and ARIA labelling, light-dark() theming. Rejected: inline handlers and deprecated <font>.
         "domain": "html_css",
         "prompt": "Create an accessible, modern, fluid component using CSS Container Queries and semantic HTML5.",
         "chosen": (
@@ -519,6 +541,7 @@ EXEMPLARS = [
         "capabilities": ["container_queries", "semantic_html", "a11y", "modern_css"],
     },
     {
+        # Teaches: strict mode, trap-based cleanup, and atomic publish via temp file + mv. Rejected: in-place truncating write.
         "domain": "bash_posix",
         "prompt": "Write a robust, safe POSIX-compliant bash wrapper with exit traps, atomic replacement, and strict error handling.",
         "chosen": (
@@ -577,6 +600,7 @@ def generate_language_matrix() -> List[TrainingPair]:
         5. Construct a `TrainingPair` dataclass instance with full metadata.
         6. Append to `pairs` list and return.
     """
+    # One shared timestamp for the whole batch (not per record).
     pairs: List[TrainingPair] = []
     now: str = datetime.now(timezone.utc).isoformat()
 
@@ -629,6 +653,8 @@ def export_seat_shard(seat_id: int, root_dir: Optional[Path] = None) -> Path:
         7. Write checksum manifest to `exchange/seat_<XX>_corpus.sha256`.
         8. Return the shard `Path`.
     """
+    # Note: the shard content is the same exemplar set for every seat; only the
+    # filename differs, which is what keeps seats from colliding on write.
     # 1. Resolve workspace root and target directory
     root = Path(root_dir or ".").resolve()
     exchange = root / "exchange"
@@ -643,6 +669,7 @@ def export_seat_shard(seat_id: int, root_dir: Optional[Path] = None) -> Path:
         for p in pairs:
             f.write(json.dumps(p.to_dict()) + "\n")
 
+    # Manifest format matches `sha256sum -c`: "<hex>  <filename>" (two spaces).
     # 4. Compute and write SHA-256 integrity manifest
     checksum = hashlib.sha256(shard_path.read_bytes()).hexdigest()
     manifest_path = exchange / f"seat_{seat_id:02d}_corpus.sha256"
@@ -689,8 +716,12 @@ def reconcile_mesh_shards(root_dir: Optional[Path] = None) -> Dict[str, Any]:
     root = Path(root_dir or ".").resolve()
     exchange = root / "exchange"
     if not exchange.is_dir():
+        # Nothing to merge. Note this early-return dict uses different keys than the normal result
+        # below ("unique_records" instead of master_path/domains_covered).
         return {"total_records": 0, "unique_records": 0, "shards_processed": 0}
 
+    # seen_hashes implements first-writer-wins dedup in sorted shard order, so the
+    # merge result is the same on every box that sees the same shard files.
     seen_hashes: set = set()
     unified_records: list = []
     shards_processed: int = 0
@@ -704,6 +735,7 @@ def reconcile_mesh_shards(root_dir: Optional[Path] = None) -> Dict[str, Any]:
                     continue
                 try:
                     data = json.loads(line)
+                    # Same formula as TrainingPair.sha256; .get() tolerates records missing a field.
                     # Content-addressed hashing for strict deduplication
                     h = hashlib.sha256(
                         f"{data.get('domain')}:{data.get('prompt')}:{data.get('chosen')}".encode("utf-8")
@@ -715,6 +747,8 @@ def reconcile_mesh_shards(root_dir: Optional[Path] = None) -> Dict[str, Any]:
                     # Ignore malformed lines to prevent corrupted peer records from breaking the merge
                     continue
 
+    # Note the master file itself is rewritten each run (it is derived output, fully
+    # rebuildable from the immutable per-seat shards in exchange/).
     # Publish compiled non-overwrite dataset
     data_dir = root / "data" / "datasets"
     data_dir.mkdir(parents=True, exist_ok=True)

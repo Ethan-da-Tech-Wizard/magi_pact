@@ -23,9 +23,12 @@ from pact.systems import (
 
 
 class TestSystemsTrajectories(unittest.TestCase):
+    """Tests for the systems/firmware trajectories, their safety validators, fixture parsers and shard export."""
     def setUp(self):
+        """Make a temp root and copy the JSON fixtures into it."""
         self.test_dir = tempfile.mkdtemp()
         self.root = Path(self.test_dir)
+        # Fixtures are copied from ./data/fixtures (relative to the current directory), so run pytest from the repo root.
         # Copy fixtures over to test directory
         src_fixtures = Path("data/fixtures")
         dest_fixtures = self.root / "data" / "fixtures"
@@ -35,9 +38,11 @@ class TestSystemsTrajectories(unittest.TestCase):
                 shutil.copy(f, dest_fixtures / f.name)
 
     def tearDown(self):
+        """Delete the temp root."""
         shutil.rmtree(self.test_dir, ignore_errors=True)
 
     def test_systems_trajectory_generation_and_counts(self):
+        """15 baseline trajectories, exactly 3 per domain, all gold-certified DPO pairs with sha256."""
         pairs = generate_systems_trajectories()
         self.assertEqual(len(pairs), 15)
 
@@ -63,6 +68,7 @@ class TestSystemsTrajectories(unittest.TestCase):
             self.assertEqual(len(p.sha256), 64)
 
     def test_bash_safety_validator_on_trajectories(self):
+        """Chosen Bash passes (strict flags, trap); rejected Bash fails."""
         for ex in SYSTEMS_TRAJECTORIES:
             if ex["domain"] == "bash_posix":
                 chosen_res = BashSafetyValidator.validate(ex["chosen"])
@@ -70,11 +76,13 @@ class TestSystemsTrajectories(unittest.TestCase):
                 self.assertTrue(chosen_res["has_strict_flags"])
                 self.assertTrue(chosen_res["has_trap"])
 
+                # Each "rejected" example must fail validation too, proving the validators can tell good from bad.
                 # Rejected scripts should fail safety checks
                 rejected_res = BashSafetyValidator.validate(ex["rejected"])
                 self.assertFalse(rejected_res["valid"], "Rejected script should have failed safety validation")
 
     def test_arch_pkgbuild_validator_on_trajectories(self):
+        """Chosen PKGBUILDs pass; rejected PKGBUILDs fail."""
         for ex in SYSTEMS_TRAJECTORIES:
             if ex["domain"] == "arch_linux":
                 chosen_res = ArchPkgbuildValidator.validate(ex["chosen"])
@@ -85,13 +93,16 @@ class TestSystemsTrajectories(unittest.TestCase):
                 self.assertFalse(rejected_res["valid"], "Rejected PKGBUILD should fail validation")
 
     def test_fedora_dnf5_validator_on_trajectories(self):
+        """Rejected Fedora commands fail the dnf5 validator."""
         for ex in SYSTEMS_TRAJECTORIES:
             if ex["domain"] == "fedora_linux":
                 rejected_res = FedoraDnf5Validator.validate_command(ex["rejected"])
                 self.assertFalse(rejected_res["valid"], "Rejected Fedora command should fail validation")
 
     def test_firmware_safety_gate_blocks_destructive_hardware_actions(self):
+        # Allow-list sample: inspection commands only.
         # Read-only and status inspections must pass
+        """The firmware gate allows read-only commands and blocks every destructive one."""
         safe_cmds = [
             "fwupdmgr get-devices --json",
             "fwupdmgr get-updates",
@@ -102,6 +113,7 @@ class TestSystemsTrajectories(unittest.TestCase):
         for cmd in safe_cmds:
             self.assertTrue(FirmwareSafetyGate.verify_command_safety(cmd))
 
+        # Deny-list sample: every flash, install, raw write or MSR write must raise FirmwareSafetyViolation.
         # Dangerous flashing and write commands must be strictly rejected
         hazardous_cmds = [
             "flashrom -p internal -w bios.bin",
@@ -116,6 +128,7 @@ class TestSystemsTrajectories(unittest.TestCase):
                 FirmwareSafetyGate.verify_command_safety(cmd)
 
     def test_fwupd_read_only_device_fixture_parsing(self):
+        """fwupd device fixture parses to 4 devices with the expected System Firmware attributes."""
         fixture_path = self.root / "data" / "fixtures" / "fwupd_devices.json"
         self.assertTrue(fixture_path.exists())
         data = FwupdFixtureParser.load_fixture(fixture_path)
@@ -136,6 +149,7 @@ class TestSystemsTrajectories(unittest.TestCase):
         self.assertEqual(sys_fw["version_lowest"], "0.1.0")
 
     def test_uefi_esrt_fixture_parsing_and_anti_rollback(self):
+        """ESRT fixture parses to 2 entries that are downgrade-safe and SUCCESS."""
         fixture_path = self.root / "data" / "fixtures" / "uefi_esrt.json"
         self.assertTrue(fixture_path.exists())
         data = FwupdFixtureParser.load_fixture(fixture_path)
@@ -147,6 +161,8 @@ class TestSystemsTrajectories(unittest.TestCase):
             self.assertEqual(e["status"], "SUCCESS")
 
     def test_git_worktree_porcelain_parser(self):
+        # Hand-written "git worktree list --porcelain" output: a main worktree and a locked one with a lock reason.
+        """The porcelain parser extracts path, branch and lock reason per worktree."""
         mock_porcelain = (
             "worktree /home/user/magi_pact\n"
             "HEAD 938898f5c41d84385102d09c9cb26d26c8a795a0\n"
@@ -169,7 +185,9 @@ class TestSystemsTrajectories(unittest.TestCase):
         self.assertEqual(worktrees[1]["lock_reason"], "Seat 04 actively generating trajectory specs")
 
     def test_shard_export_and_multi_seat_reconciliation(self):
+        # Seat 03 contributes the 14 base records; seat 04 the 15 systems records (counts asserted below).
         # 1. Export seat 03 baseline shard
+        """Two seats' shards reconcile to 29 records across 14 domains, and the manifest hash matches."""
         export_seat_shard(3, self.root)
 
         # 2. Export seat 04 systems & firmware shard
@@ -190,6 +208,8 @@ class TestSystemsTrajectories(unittest.TestCase):
         self.assertEqual(res["domains_covered"], 14)
 
     def test_systems_corpus_dataset_integrity(self):
+        # These two tests read the committed corpus using a path relative to the current directory (repo root).
+        """The committed systems corpus has 40 rows, 8 per domain, matches its sha256, with no leaks or flash commands."""
         corpus_path = Path("data/corpus/systems/systems_corpus.jsonl")
         self.assertTrue(corpus_path.exists(), "systems_corpus.jsonl must exist")
 
@@ -213,6 +233,7 @@ class TestSystemsTrajectories(unittest.TestCase):
             dom = rec["domain"]
             domain_counts[dom] = domain_counts.get(dom, 0) + 1
 
+            # Per-record checks: no policy leaks, and no flash command in BIOS/UEFI prompts or chosen answers.
             # Assert zero policy leaks
             leaks = scanner.scan_record(rec)
             self.assertEqual(len(leaks), 0, f"Policy leak in {rec['id']}: {leaks}")

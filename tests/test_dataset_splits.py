@@ -16,12 +16,16 @@ from pact.splits import (
 
 
 class TestDatasetSplits(unittest.TestCase):
+    """Tests for pact.splits: ChatML formatting with loss masks, split sizes, domain coverage, contamination and checksum integrity."""
     def setUp(self):
+        """Locate the repo root and committed golden corpus and create a splitter."""
         self.root_dir = Path(__file__).resolve().parent.parent
+        # These tests read the committed golden master corpus, so the expected counts below (124 records, 24/68/19/13) must be updated if that file changes.
         self.corpus_path = self.root_dir / "exchange" / "consolidated" / "golden_master_corpus.jsonl"
         self.splitter = DatasetSplitter(root_dir=self.root_dir)
 
     def test_qwen_chatml_sft_formatter(self):
+        """SFT records become system/user/assistant ChatML text with a loss mask covering only the assistant span."""
         record = {
             "id": "TEST_SFT_01",
             "prompt": "Write a thread-safe counter in C.",
@@ -34,12 +38,14 @@ class TestDatasetSplits(unittest.TestCase):
         self.assertIn("messages", res)
         self.assertIn("loss_mask_metadata", res)
 
+        # ChatML framing: <|im_start|>role ... <|im_end|> for system, user, assistant.
         # Check special tokens
         text = res["text"]
         self.assertTrue(text.startswith(f"{IM_START}system\n"))
         self.assertIn(f"{IM_START}user\nWrite a thread-safe counter in C.{IM_END}\n", text)
         self.assertIn(f"{IM_START}assistant\nint counter = 0;\npthread_mutex_t lock;{IM_END}", text)
 
+        # Loss masking: only the assistant message contributes to the training loss.
         # Check messages loss flags
         msgs = res["messages"]
         self.assertEqual(len(msgs), 3)
@@ -47,6 +53,7 @@ class TestDatasetSplits(unittest.TestCase):
         self.assertFalse(msgs[1]["loss"])
         self.assertTrue(msgs[2]["loss"])
 
+        # The recorded start/end offsets must slice out exactly the assistant text plus its end token.
         # Check assistant span
         meta = res["loss_mask_metadata"]
         self.assertTrue(meta["assistant_only_loss"])
@@ -56,6 +63,7 @@ class TestDatasetSplits(unittest.TestCase):
         self.assertEqual(text[s:e], f"int counter = 0;\npthread_mutex_t lock;{IM_END}")
 
     def test_qwen_chatml_dpo_formatter(self):
+        """DPO records produce separate chosen/rejected texts, each with its own assistant-only span."""
         record = {
             "id": "TEST_DPO_01",
             "prompt": "Safely increment shared state in Go.",
@@ -78,6 +86,7 @@ class TestDatasetSplits(unittest.TestCase):
         self.assertEqual(res["text_rejected"][r_spans[0]["start"]:r_spans[0]["end"]], f"state++{IM_END}")
 
     def test_qwen_chatml_multiturn_formatter(self):
+        """Multi-turn records keep one loss span per assistant turn."""
         record = {
             "id": "TEST_MULTI_01",
             "prompt": "Multi-turn task",
@@ -99,6 +108,7 @@ class TestDatasetSplits(unittest.TestCase):
         self.assertEqual(res["text"][spans[1]["start"]:spans[1]["end"]], f"impl Drop for ThreadPool {{ ... }}{IM_END}")
 
     def test_corpus_partition_and_splits_counts(self):
+        """The 124-record corpus partitions into 24 SFT, 68 DPO, 19 dev, 13 eval rows (dev about 15%)."""
         records = self.splitter.load_corpus(self.corpus_path)
         self.assertEqual(len(records), 124)
 
@@ -113,11 +123,13 @@ class TestDatasetSplits(unittest.TestCase):
         total_split = len(res.sft_train) + len(res.dpo_train) + len(res.dev) + len(res.eval_heldout)
         self.assertEqual(total_split, 124)
 
+        # The dev ratio is an outcome of whole-task-family holdout, so it is asserted as a range as well as the exact value.
         # Dev split ratio ~15%
         self.assertAlmostEqual(res.dev_ratio, 0.1532, places=3)
         self.assertTrue(0.14 <= res.dev_ratio <= 0.16)
 
     def test_task_family_domain_coverage(self):
+        """All 13 task-family domains appear in dev, eval and training."""
         records = self.splitter.load_corpus(self.corpus_path)
         res = self.splitter.partition_records(records)
 
@@ -128,6 +140,7 @@ class TestDatasetSplits(unittest.TestCase):
         }
         self.assertEqual(len(expected_domains), 13)
 
+        # All 13 domains must be represented in dev, in the held-out eval set, and in training.
         # 100% domain coverage in dev split
         dev_domains = {r["domain"] for r in res.dev}
         self.assertEqual(dev_domains, expected_domains)
@@ -141,6 +154,7 @@ class TestDatasetSplits(unittest.TestCase):
         self.assertEqual(train_domains, expected_domains)
 
     def test_zero_cross_split_contamination(self):
+        """No prompt or id is shared between train, dev and eval."""
         records = self.splitter.load_corpus(self.corpus_path)
         res = self.splitter.partition_records(records)
 
@@ -148,11 +162,13 @@ class TestDatasetSplits(unittest.TestCase):
         dev_prompts = {r["prompt"].strip() for r in res.dev}
         eval_prompts = {r["prompt"].strip() for r in res.eval_heldout}
 
+        # Contamination guard: no prompt (whitespace-trimmed) may appear in more than one of train/dev/eval.
         # Prompt overlap assertions
         self.assertEqual(len(train_prompts & dev_prompts), 0, "Train and Dev prompts must have 0 overlap")
         self.assertEqual(len(train_prompts & eval_prompts), 0, "Train and Eval prompts must have 0 overlap")
         self.assertEqual(len(dev_prompts & eval_prompts), 0, "Dev and Eval prompts must have 0 overlap")
 
+        # Record ids must also be disjoint across splits.
         # ID disjointness
         train_ids = {r["id"] for r in res.sft_train} | {r["id"] for r in res.dpo_train}
         dev_ids = {r["id"] for r in res.dev}
@@ -163,6 +179,7 @@ class TestDatasetSplits(unittest.TestCase):
         self.assertEqual(len(dev_ids & eval_ids), 0)
 
     def test_export_splits_and_checksum_verification(self):
+        """write_splits creates every file and CHECKSUMS.sha256 matches the written bytes."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             out_path = Path(tmp_dir)
             records = self.splitter.load_corpus(self.corpus_path)
@@ -185,6 +202,7 @@ class TestDatasetSplits(unittest.TestCase):
                 self.assertEqual(exp_sha, act_sha, f"Checksum mismatch for {fname}")
 
     def test_production_splits_exist_and_verified(self):
+        """The committed data/datasets files exist and match their manifest counts and hashes."""
         datasets_dir = self.root_dir / "data" / "datasets"
         manifest_path = datasets_dir / "split_manifest.json"
         chk_path = datasets_dir / "CHECKSUMS.sha256"
@@ -200,6 +218,7 @@ class TestDatasetSplits(unittest.TestCase):
         self.assertEqual(manifest["splits"]["eval_heldout"]["row_count"], 13)
         self.assertTrue(manifest["cross_split_contamination"]["contamination_free"])
 
+        # Committed split files must hash to exactly what the manifest records.
         # Check actual files match manifest
         for split_key, meta in manifest["splits"].items():
             fname = f"{split_key}.jsonl"
