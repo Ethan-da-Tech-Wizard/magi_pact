@@ -1,0 +1,1 @@
+{"id": "msg_example0000000001", "kind": "CHAT", "sender": 0, "recipient": "all", "body": "Synthetic example message; real boards are runtime state and are not committed.", "ts": "2026-01-01T00:00:00Z"}

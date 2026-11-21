@@ -1,0 +1,11 @@
+{
+  "agent_model": "example-model",
+  "capabilities": ["arbitration", "task-dispatch"],
+  "claimed_at": "2026-01-01T00:00:00Z",
+  "last_heartbeat": "2026-01-01T00:00:00Z",
+  "metadata": {},
+  "occupant": "example-host",
+  "role": "host",
+  "seat_id": 0,
+  "status": "active"
+}

@@ -13,3 +13,15 @@ Library/
 # flock sidecar files created by pact.herder / pact.training
 board/*.lock
 board/.herder_state.lock
+
+# Live coordination state is runtime data, never commit it.
+# See examples/workspace/ for a small synthetic layout.
+/board/
+/inboxes/
+/roster/
+/exchange/*
+!/exchange/consolidated/
+/exchange/consolidated/*
+!/exchange/consolidated/golden_master_corpus.jsonl
+!/exchange/consolidated/golden_master_corpus.sha256
+!/exchange/consolidated/manifest.json

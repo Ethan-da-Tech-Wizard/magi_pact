@@ -558,7 +558,7 @@ EXEMPLARS = [
             "TARGET_FILE=\"${1:-output.json}\"\n"
             "TEMP_PAYLOAD=\"$TMP_DIR/payload.tmp\"\n\n"
             "cat << 'EOF' > \"$TEMP_PAYLOAD\"\n"
-            "{\"status\": \"certified\", \"node\": \"example-host-9\"}\n"
+            "{\"status\": \"certified\", \"node\": \"node-a\"}\n"
             "EOF\n\n"
             "# Atomic replacement via move: avoids partial reads by concurrent processes\n"
             "mv -f \"$TEMP_PAYLOAD\" \"$TARGET_FILE\"\n"

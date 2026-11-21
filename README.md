@@ -1,13 +1,21 @@
-# Magi Pact: Decentralized Multi-Agent Consensus Bus
+# Magi Pact: File-Based Multi-Agent Coordination Bus (Prototype)
 
 [![License](https://img.shields.io/badge/License-MIT%20%7C%20Apache--2.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.9%2B-blue.svg)](pyproject.toml)
-[![Architecture](https://img.shields.io/badge/Architecture-Serverless%20P2P-orange.svg)](#architecture)
+[![Architecture](https://img.shields.io/badge/Architecture-Shared%20Filesystem-orange.svg)](#architecture)
 [![Consensus](https://img.shields.io/badge/Consensus-LWW%20%2B%20Incumbent%20Protection-green.svg)](#consensus-and-seat-reservation)
 
-**Magi Pact** is a serverless, zero-trust coordination framework and consensus bus designed for heterogeneous AI agent clusters. It enables autonomous coding and reasoning agents across diverse environments (macOS, Arch Linux, Fedora, Ubuntu, Cloud VMs) to collaborate deterministically without requiring a central coordinator, centralized daemon, or open network listening ports.
+**Magi Pact** is a prototype, file-based coordination bus for clusters of AI agents. Agents on different machines (macOS, Linux, VMs) coordinate through a shared directory that is replicated by something else, such as Syncthing, a Git worktree or a network volume. There is no central daemon and no network listener in this repo.
 
-By leveraging filesystem-level atomic journaling, advisory distributed locks, and deterministic Last-Write-Wins (LWW) conflict resolution with incumbent protection, Magi Pact provides a single-point-of-failure-free communication layer suitable for peer-to-peer file synchronization engines (such as Syncthing), Git worktrees, and shared network volumes.
+It uses append-only journaling, advisory file locks, and last-write-wins (LWW) conflict resolution with incumbent protection. The shared directory is the single point of failure; this project does not remove it.
+
+### Limits and threat model (read before use)
+
+- **Trusted participants only.** Messages are not signed, encrypted or authenticated. Anyone who can write to the shared directory can post as any seat. `pact/herder.py` trusts the local CLI. This is not a zero-trust system and has no security guarantees.
+- **Prototype, not production.** Locks are advisory and rely on `fcntl.flock` semantics of the underlying filesystem, which may not hold across sync tools. Conflict handling is best effort.
+- **Test coverage is limited** to the cases in `tests/` (60 tests, stdlib `unittest`, passing on Python 3.9 and 3.13 when last checked). Passing tests do not prove correctness under concurrent multi-host use.
+- **Runtime state is not committed.** `board/`, `inboxes/`, `roster/` and most of `exchange/` are created at run time and git-ignored. See `examples/workspace/` for a small synthetic layout.
+- The repo also holds unrelated dataset, training-recipe and systems-corpus tooling; those parts are not part of the message bus.
 
 ---
 
@@ -210,8 +218,9 @@ magi_pact/
 │   ├── messages.jsonl       # Consensus message journal
 │   ├── claims.json          # Active file locks
 │   └── BRIEF.md             # Active room objectives
-├── exchange/                # Patches, checksums, and dataset shards
-├── tests/                   # Complete test suite (44 passing tests)
+├── exchange/                # Patches, checksums, and dataset shards (runtime; only consolidated/ is tracked)
+├── examples/workspace/      # Synthetic example of roster/board/inboxes layout
+├── tests/                   # Test suite (60 tests)
 ├── pyproject.toml           # Standard PEP 517/518 build metadata
 ├── setup.py                 # Setuptools installer
 ├── LICENSE                  # Dual-license notice
