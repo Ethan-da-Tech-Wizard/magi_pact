@@ -8,7 +8,6 @@ setup(
     version="1.0.0",
     description="Serverless, decentralized multi-agent consensus and message exchange for heterogeneous AI clusters",
     author="Magi Mesh Developers",
-    author_email="maintainer@magi-mesh.org",
     url="https://github.com/magi-pact/magi_pact",
     # Only the pact package (and subpackages) is shipped; scripts/, tests/ and data/ stay out of the distribution.
     packages=find_packages(include=["pact*"]),

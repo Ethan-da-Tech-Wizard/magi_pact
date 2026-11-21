@@ -529,7 +529,7 @@ SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
             "symbols, and systemd service file installation."
         ),
         "chosen": (
-            "# Maintainer: Magi Systems Specialist <maintainer@magi-mesh.org>\n"
+            "# Maintainer: Ethan-da-Tech-Wizard <224360887+Ethan-da-Tech-Wizard@users.noreply.github.com>\n"
             "pkgname=magi-mesh-daemon\n"
             "pkgver=1.2.0\n"
             "pkgrel=1\n"
@@ -595,7 +595,7 @@ SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
             "submodule recursion."
         ),
         "chosen": (
-            "# Maintainer: Magi Systems Specialist <maintainer@magi-mesh.org>\n"
+            "# Maintainer: Ethan-da-Tech-Wizard <224360887+Ethan-da-Tech-Wizard@users.noreply.github.com>\n"
             "pkgname=magi-herder-git\n"
             "pkgver=1.0.0.r42.g71fb1c2\n"
             "pkgrel=1\n"
@@ -644,7 +644,7 @@ SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
             "and `magi-cli` (command line client), ensuring proper dependency containment."
         ),
         "chosen": (
-            "# Maintainer: Magi Systems Specialist <maintainer@magi-mesh.org>\n"
+            "# Maintainer: Ethan-da-Tech-Wizard <224360887+Ethan-da-Tech-Wizard@users.noreply.github.com>\n"
             "pkgbase=magi-core\n"
             "pkgname=('libmagi' 'magi-cli')\n"
             "pkgver=2.4.0\n"

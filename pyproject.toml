@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "MIT OR Apache-2.0"}
 authors = [
-    {name = "Magi Mesh Developers", email = "maintainer@magi-mesh.org"}
+    {name = "Magi Mesh Developers"}
 ]
 keywords = ["multi-agent", "consensus", "distributed-systems", "p2p", "federated-mesh", "ai-coordination"]
 classifiers = [

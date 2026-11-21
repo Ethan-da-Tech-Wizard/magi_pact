@@ -1,6 +1,6 @@
 {
   "source_corpus": "exchange/consolidated/golden_master_corpus.jsonl",
-  "source_sha256": "546cbee696142c5ec44385a86115c1b99a9e4bd61571de7c47eb23454d5e63f8",
+  "source_sha256": "52699a730fd28e92df8df03e08125e1ffb2c96a83298eabcace46a7845342767",
   "source_total_rows": 124,
   "chat_template": "qwen3.5_chatml",
   "assistant_only_loss_masking": true,
@@ -43,7 +43,7 @@
         "rust": 5,
         "typescript": 3
       },
-      "sha256": "73ff639d1ce0d2c14dbbcd8114c38a5b6d0bcf5ebf55eb60aac6d62e87cf88c8"
+      "sha256": "9348910b3725e27f54a7dbf6b0bd4eb57257cd6acaf109c3c1d7fa4950fb58a1"
     },
     "dev": {
       "path": "data/datasets/dev.jsonl",
@@ -68,7 +68,7 @@
         "rust": 2,
         "typescript": 1
       },
-      "sha256": "dbda23bc720d18462f7f8951fff3e3ca4f219dad9de4665c97338d89e43418c5"
+      "sha256": "28e36df176e56b721e706d4baeea4f604f4d0c89f4997ffb2740820458cf5cc1"
     },
     "eval_heldout": {
       "path": "data/datasets/eval_heldout.jsonl",
@@ -93,7 +93,7 @@
         "rust": 1,
         "typescript": 1
       },
-      "sha256": "6b0926a07569f2dea3e4960570b0c7c6a495a834df2b7132b412d907e6bbb75b"
+      "sha256": "e591e5df9abf78317f1efe90a7e8f40c5e8e2d3a8ea48dc38f18e7cb85e2beed"
     }
   },
   "total_split_rows": 124,

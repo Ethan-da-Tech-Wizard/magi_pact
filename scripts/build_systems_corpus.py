@@ -333,7 +333,7 @@ EXPANDED_SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
             "check() running go test, and installation to /usr/bin."
         ),
         "chosen": (
-            "# Maintainer: Magi Systems Specialist <systems@magi-mesh.org>\n"
+            "# Maintainer: Ethan-da-Tech-Wizard <224360887+Ethan-da-Tech-Wizard@users.noreply.github.com>\n"
             "pkgname=net-probe\n"
             "pkgver=2.4.0\n"
             "pkgrel=1\n"
@@ -389,7 +389,7 @@ EXPANDED_SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
             "test suite execution in check(), and strict namcap verification."
         ),
         "chosen": (
-            "# Maintainer: Magi Systems Specialist <systems@magi-mesh.org>\n"
+            "# Maintainer: Ethan-da-Tech-Wizard <224360887+Ethan-da-Tech-Wizard@users.noreply.github.com>\n"
             "pkgname=libringbuffer\n"
             "pkgver=1.3.2\n"
             "pkgrel=1\n"
@@ -440,7 +440,7 @@ EXPANDED_SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
             "and pytest check()."
         ),
         "chosen": (
-            "# Maintainer: Magi Systems Specialist <systems@magi-mesh.org>\n"
+            "# Maintainer: Ethan-da-Tech-Wizard <224360887+Ethan-da-Tech-Wizard@users.noreply.github.com>\n"
             "pkgname=python-mesh-protocol\n"
             "pkgver=3.1.0\n"
             "pkgrel=1\n"
@@ -491,7 +491,7 @@ EXPANDED_SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
             "rules, and adheres to zero post-install scriptlet rules."
         ),
         "chosen": (
-            "# Maintainer: Magi Systems Specialist <systems@magi-mesh.org>\n"
+            "# Maintainer: Ethan-da-Tech-Wizard <224360887+Ethan-da-Tech-Wizard@users.noreply.github.com>\n"
             "pkgname=magi-agent-daemon\n"
             "pkgver=1.8.0\n"
             "pkgrel=1\n"
@@ -551,7 +551,7 @@ EXPANDED_SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
             "installing sources to /usr/src/<pkgname>-<pkgver>, generating dkms.conf, and declaring dkms dependencies."
         ),
         "chosen": (
-            "# Maintainer: Magi Systems Specialist <systems@magi-mesh.org>\n"
+            "# Maintainer: Ethan-da-Tech-Wizard <224360887+Ethan-da-Tech-Wizard@users.noreply.github.com>\n"
             "pkgname=magi-pcie-driver-dkms\n"
             "pkgver=0.9.4\n"
             "pkgrel=1\n"
@@ -609,7 +609,7 @@ EXPANDED_SYSTEMS_TRAJECTORIES: List[Dict[str, Any]] = [
         "chosen": (
             "# 1. Add internal repository using dnf5 config-manager with priority and gpgcheck\n"
             "dnf5 config-manager addrepo \\\n"
-            "    --from-repofile=\"https://repo.internal.magi-mesh.org/rpm/magi.repo\" \\\n"
+            "    --from-repofile=\"https://repo.internal.example.com/rpm/magi.repo\" \\\n"
             "    --overwrite\n\n"
             "# 2. Explicitly enforce GPG signature checks and elevate repo priority\n"
             "dnf5 config-manager setopt \\\n"

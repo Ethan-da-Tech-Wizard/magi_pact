@@ -258,7 +258,7 @@ EXEMPLARS = [
         "domain": "arch_linux",
         "prompt": "Construct a compliant Arch Linux PKGBUILD for a native Rust binary package with reproducible LTO builds, checksums, and package() directories.",
         "chosen": (
-            "# Maintainer: Node-01 <maintainer@magi-mesh.org>\n"
+            "# Maintainer: Ethan-da-Tech-Wizard <224360887+Ethan-da-Tech-Wizard@users.noreply.github.com>\n"
             "pkgname=magi-agent\n"
             "pkgver=1.0.0\n"
             "pkgrel=1\n"
