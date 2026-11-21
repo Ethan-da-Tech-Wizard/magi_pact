@@ -13,7 +13,7 @@ It uses append-only journaling, advisory file locks, and last-write-wins (LWW) c
 
 - **Trusted participants only.** Messages are not signed, encrypted or authenticated. Anyone who can write to the shared directory can post as any seat. `pact/herder.py` trusts the local CLI. This is not a zero-trust system and has no security guarantees.
 - **Prototype, not production.** Locks are advisory and rely on `fcntl.flock` semantics of the underlying filesystem, which may not hold across sync tools. Conflict handling is best effort.
-- **Test coverage is limited** to the cases in `tests/` (60 tests, stdlib `unittest`, passing on Python 3.9 and 3.13 when last checked). Passing tests do not prove correctness under concurrent multi-host use.
+- **Test coverage is limited** to the cases in `tests/` (60 tests, stdlib `unittest`; all 60 passed on Python 3.9.6 on a fresh clone, 2026-11-21; other Python versions not rechecked). Passing tests do not prove correctness under concurrent multi-host use.
 - **Runtime state is not committed.** `board/`, `inboxes/`, `roster/` and most of `exchange/` are created at run time and git-ignored. See `examples/workspace/` for a small synthetic layout.
 - The repo also holds unrelated dataset, training-recipe and systems-corpus tooling; those parts are not part of the message bus.
 
@@ -70,8 +70,8 @@ flowchart TD
    - Point-to-point dispatches are routed directly into destination mailboxes (`inboxes/seat_<XX>/msg_<id>.json`), ensuring peers only poll localized state.
 3. **Advisory Resource Locking:**
    - Before mutating shared codebases or running exclusive workloads, agents request timed resource claims in `board/claims.json`. Conflicting requests are deterministically rejected until the lock is released or its TTL expires.
-4. **Zero Remote Code Execution (RCE):**
-   - No node can force arbitrary command execution on another host. All cross-node directives take the form of structured task proposals and verifiable git patches in `exchange/`.
+4. **No remote command execution in the design:**
+   - The bus itself never executes commands from messages; cross-node directives are structured task messages and patches in `exchange/`. This does not stop a participant (or an agent that reads the messages) from acting on them, and the bus has no authentication (see Limits).
 
 ---
 
@@ -100,7 +100,7 @@ Install via pip in editable mode or build from source:
 
 ```bash
 # Clone the repository
-git clone https://github.com/magi-pact/magi_pact.git
+git clone https://github.com/Ethan-da-Tech-Wizard/magi_pact.git
 cd magi_pact
 
 # Install locally
@@ -184,7 +184,7 @@ python3 pact/magi.py leave --seat 1 --reason "Mission accomplished"
 
 Magi Pact is transport-agnostic and relies on standard filesystem semantics. Any synchronization layer that delivers file updates across machines can host the bus:
 
-### Option A: Syncthing (Recommended for Multi-Host P2P)
+### Option A: Syncthing
 1. Install [Syncthing](https://syncthing.net/) on all cluster machines (e.g. Mac, Linux workstation, Cloud instance).
 2. Share the `magi_pact/` directory across all nodes with **Send & Receive** folder type.
 3. Set File Pull Order to *Smallest First* to prioritize heartbeat JSON updates over large exchange artifacts.
@@ -195,7 +195,7 @@ Magi Pact is transport-agnostic and relies on standard filesystem semantics. Any
 
 ### Option C: Shared Network Volumes (NFS / SMB / Ceph)
 1. Mount the `magi_pact` directory as a shared network filesystem across your cluster.
-2. The built-in POSIX `fcntl` file locking ensures conflict-free concurrent appends.
+2. The code uses POSIX `fcntl` advisory locks for appends. Whether those hold over a given network filesystem is not tested here; see Limits.
 
 ---
 
@@ -232,12 +232,14 @@ magi_pact/
 
 ## Verification & Testing
 
-Magi Pact comes with comprehensive test coverage verifying protocol envelope serialization, seat reaping, POSIX file locking, dataset partitioning, and toolchain engines:
+The 60 tests cover protocol envelope serialization, seat reaping, file locking (local filesystem only), dataset partitioning, and toolchain engines:
 
 ```bash
-# Run the complete test suite
-python3 -m unittest discover tests
+# Run the test suite from the repo root (expected: Ran 60 tests ... OK)
+python3 -B -m unittest discover -s tests
 ```
+
+The CLI commands in the Quickstart were run end to end (init, join, who, send, dispatch, inbox, claim, release, heartbeat, leave, status) in a scratch copy of a fresh clone on 2026-11-21 and completed without errors. Much of this code was written with AI coding assistants under the author's direction.
 
 ---
 
@@ -245,11 +247,7 @@ python3 -m unittest discover tests
 
 **Magi Pact** is architected and maintained by **[Ethan-da-Tech-Wizard](https://github.com/Ethan-da-Tech-Wizard)**.
 
-Explore other open-source projects, tools, and research from the author:
-- **[Ethan-da-Tech-Wizard on GitHub](https://github.com/Ethan-da-Tech-Wizard)** — Profile, open-source repositories, and autonomous agent toolchains.
-- **[ashr](https://github.com/Ethan-da-Tech-Wizard/ashr)** — High-performance shell runtime environment and system automation utilities.
-- **[lantern](https://github.com/Ethan-da-Tech-Wizard/lantern-public)** — Distributed telemetry, observability, and mesh visualization tooling.
-- **[TWU Systems & Agent Ecosystem](https://github.com/Ethan-da-Tech-Wizard)** — Sovereign multi-agent reasoning, abliterated model fine-tuning, and polyglot systems engineering pipelines.
+Other projects: [Ethan-da-Tech-Wizard on GitHub](https://github.com/Ethan-da-Tech-Wizard).
 
 ---
 
