@@ -17,6 +17,9 @@ It uses append-only journaling, advisory file locks, and last-write-wins (LWW) c
 - **Runtime state is not committed.** `board/`, `inboxes/`, `roster/` and most of `exchange/` are created at run time and git-ignored. See `examples/workspace/` for a small synthetic layout.
 - The repo also holds unrelated dataset, training-recipe and systems-corpus tooling; those parts are not part of the message bus.
 
+> [!TIP]
+> **Complete Node Slot Manual:** See [docs/NODE_SLOT_MESH_MANUAL.md](docs/NODE_SLOT_MESH_MANUAL.md) for the complete field manual covering the 4-node sovereign mesh, mobile/cellular synchronization, Merkle WAL catch-up, and peer collaboration with `zazmattaz-debug`.
+
 ---
 
 ## Architecture
